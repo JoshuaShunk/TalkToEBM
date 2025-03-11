@@ -5,12 +5,19 @@ We interface the LLM via the simple class AbstractChatModel. To use your own LLM
 """
 
 from dataclasses import dataclass
-from openai import OpenAI, AzureOpenAI
-
 import copy
 import os
-
 from typing import Union
+
+# Detect OpenAI API version
+try:
+    # For OpenAI v1.0+
+    from openai import OpenAI, AzureOpenAI
+    OPENAI_V1 = True
+except ImportError:
+    # For OpenAI <v1.0
+    import openai
+    OPENAI_V1 = False
 
 
 @dataclass
@@ -34,7 +41,7 @@ class DummyChatModel(AbstractChatModel):
 
 
 class OpenAIChatModel(AbstractChatModel):
-    client: OpenAI = None
+    client = None
     model: str = None
 
     def __init__(self, client, model):
@@ -43,19 +50,36 @@ class OpenAIChatModel(AbstractChatModel):
         self.model = model
 
     def chat_completion(self, messages, temperature, max_tokens):
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            timeout=90,
-        )
-        # we return the completion string or "" if there is an invalid response/query
-        try:
-            response_content = response.choices[0].message.content
-        except:
-            print(f"Invalid response {response}")
-            response_content = ""
+        if OPENAI_V1:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=90,
+            )
+            # we return the completion string or "" if there is an invalid response/query
+            try:
+                response_content = response.choices[0].message.content
+            except:
+                print(f"Invalid response {response}")
+                response_content = ""
+        else:
+            # Legacy OpenAI API
+            response = self.client.ChatCompletion.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                request_timeout=90,
+            )
+            # we return the completion string or "" if there is an invalid response/query
+            try:
+                response_content = response.choices[0].message["content"]
+            except:
+                print(f"Invalid response {response}")
+                response_content = ""
+        
         if response_content is None:
             print(f"Invalid response {response}")
             response_content = ""
@@ -82,37 +106,54 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs):
     Returns:
         LLM_Interface: An LLM to work with!
     """
-    if azure:  # azure deployment
-        client = AzureOpenAI(
-            azure_endpoint=(
-                os.environ["AZURE_OPENAI_ENDPOINT"]
-                if "AZURE_OPENAI_ENDPOINT" in os.environ
-                else None
-            ),
-            api_key=(
-                os.environ["AZURE_OPENAI_KEY"]
-                if "AZURE_OPENAI_KEY" in os.environ
-                else None
-            ),
-            api_version=(
-                os.environ["AZURE_OPENAI_VERSION"]
-                if "AZURE_OPENAI_VERSION" in os.environ
-                else None
-            ),
-            *args,
-            **kwargs,
-        )
-    else:  # openai api
-        client = OpenAI(
-            api_key=(
-                os.environ["OPENAI_API_KEY"] if "OPENAI_API_KEY" in os.environ else None
-            ),
-            organization=(
-                os.environ["OPENAI_API_ORG"] if "OPENAI_API_ORG" in os.environ else None
-            ),
-            *args,
-            **kwargs,
-        )
+    if OPENAI_V1:
+        if azure:  # azure deployment
+            client = AzureOpenAI(
+                azure_endpoint=(
+                    os.environ["AZURE_OPENAI_ENDPOINT"]
+                    if "AZURE_OPENAI_ENDPOINT" in os.environ
+                    else None
+                ),
+                api_key=(
+                    os.environ["AZURE_OPENAI_KEY"]
+                    if "AZURE_OPENAI_KEY" in os.environ
+                    else None
+                ),
+                api_version=(
+                    os.environ["AZURE_OPENAI_VERSION"]
+                    if "AZURE_OPENAI_VERSION" in os.environ
+                    else None
+                ),
+                *args,
+                **kwargs,
+            )
+        else:  # openai api
+            client = OpenAI(
+                api_key=(
+                    os.environ["OPENAI_API_KEY"] if "OPENAI_API_KEY" in os.environ else None
+                ),
+                organization=(
+                    os.environ["OPENAI_API_ORG"] if "OPENAI_API_ORG" in os.environ else None
+                ),
+                *args,
+                **kwargs,
+            )
+    else:
+        # Legacy OpenAI API
+        client = openai
+        if "OPENAI_API_KEY" in os.environ:
+            openai.api_key = os.environ["OPENAI_API_KEY"]
+        if "OPENAI_API_ORG" in os.environ:
+            openai.organization = os.environ["OPENAI_API_ORG"]
+        
+        if azure:
+            openai.api_type = "azure"
+            if "AZURE_OPENAI_ENDPOINT" in os.environ:
+                openai.api_base = os.environ["AZURE_OPENAI_ENDPOINT"]
+            if "AZURE_OPENAI_KEY" in os.environ:
+                openai.api_key = os.environ["AZURE_OPENAI_KEY"]
+            if "AZURE_OPENAI_VERSION" in os.environ:
+                openai.api_version = os.environ["AZURE_OPENAI_VERSION"]
 
     # the llm
     return OpenAIChatModel(client, model)

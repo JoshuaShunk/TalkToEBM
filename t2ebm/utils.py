@@ -10,9 +10,16 @@ from tenacity import (
 )
 
 import openai
-from openai import OpenAI
+try:
+    # For OpenAI v1.0+
+    from openai import OpenAI
+    client = OpenAI()
+    OPENAI_V1 = True
+except ImportError:
+    # For OpenAI <v1.0
+    client = openai
+    OPENAI_V1 = False
 
-client = OpenAI()
 import tiktoken
 
 
@@ -30,14 +37,24 @@ def num_tokens_from_string_(string: str, model_name: str) -> int:
 # )
 def openai_completion_query(model, messages, **kwargs):
     """Catches exceptions and retries, good for deployment / running experiments"""
-    response = client.chat.completions.create(model=model, messages=messages, **kwargs)
-    return response.choices[0].message.content
+    if OPENAI_V1:
+        response = client.chat.completions.create(model=model, messages=messages, **kwargs)
+        return response.choices[0].message.content
+    else:
+        # Legacy OpenAI API
+        response = client.ChatCompletion.create(model=model, messages=messages, **kwargs)
+        return response.choices[0].message["content"]
 
 
 def openai_debug_completion_query(model, messages, **kwargs):
     """Does not catch exceptions, better for debugging"""
-    response = client.chat.completions.create(model=model, messages=messages, **kwargs)
-    return response.choices[0].message.content
+    if OPENAI_V1:
+        response = client.chat.completions.create(model=model, messages=messages, **kwargs)
+        return response.choices[0].message.content
+    else:
+        # Legacy OpenAI API
+        response = client.ChatCompletion.create(model=model, messages=messages, **kwargs)
+        return response.choices[0].message["content"]
 
 
 def parse_guidance_query(query):

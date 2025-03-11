@@ -28,6 +28,15 @@ Python 3.8+ | Linux, Mac, Windows
 pip install t2ebm
 ```
 
+## OpenAI API Compatibility
+
+TalkToEBM is compatible with both older versions of the OpenAI Python package (< v1.0.0) and the newer versions (≥ v1.0.0). This ensures that regardless of which version you have installed, TalkToEBM will work correctly.
+
+If you're experiencing the error `ImportError: cannot import name 'OpenAI' from 'openai'`, it means you have an older version of the OpenAI package. You can either:
+
+1. Continue using your current OpenAI version (TalkToEBM v0.1.3+ will work with it)
+2. Update to the latest OpenAI API: `pip install --upgrade openai`
+
 # High-Level API: Pass the EBM to the LLM
 
 Here, we give an overview of high-level API functions that ask the LLM to describe graphs and EBMs. These functions take care of the prompts for you. The API Reference can be found [here](http://interpret.ml/TalkToEBM/api_reference.html).
@@ -110,7 +119,7 @@ t2ebm.describe_ebm('gpt-4-turbo-2024-04-09',
 
 > **GPT-4:** *The Generalized Additive Model (GAM) used for analyzing the Spaceship Titanic
 anomaly provides crucial insights into factors influencing the likelihood of
-passengers being transported to an alternate dimension. Here’s a concise summary
+passengers being transported to an alternate dimension. Here's a concise summary
 of the most impactful features:
 >  1. **CryoSleep**: This feature significantly
 affects the outcome, with passengers in cryosleep more likely to be transported
