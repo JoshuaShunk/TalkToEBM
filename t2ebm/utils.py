@@ -19,6 +19,8 @@ except ImportError:
     # For OpenAI <v1.0
     client = openai
     OPENAI_V1 = False
+    # Print OpenAI version for debugging
+    print(f"Using OpenAI API version: {openai.__version__}")
 
 import tiktoken
 
@@ -41,9 +43,41 @@ def openai_completion_query(model, messages, **kwargs):
         response = client.chat.completions.create(model=model, messages=messages, **kwargs)
         return response.choices[0].message.content
     else:
-        # Legacy OpenAI API
-        response = client.ChatCompletion.create(model=model, messages=messages, **kwargs)
-        return response.choices[0].message["content"]
+        try:
+            # Legacy OpenAI API for versions around 0.27.x
+            if hasattr(client, "ChatCompletion"):
+                response = client.ChatCompletion.create(model=model, messages=messages, **kwargs)
+                # Extract content based on structure
+                try:
+                    if hasattr(response.choices[0], "message"):
+                        return response.choices[0].message["content"]
+                    else:
+                        return response.choices[0]["message"]["content"]
+                except Exception as e:
+                    print(f"Error extracting content: {e}")
+                    print(f"Response structure: {response}")
+                    return ""
+            else:
+                # For very old versions
+                print("Using direct completion API for older OpenAI versions")
+                prompt = _format_messages_as_prompt(messages)
+                response = client.Completion.create(engine=model, prompt=prompt, **kwargs)
+                return response.choices[0].text.strip()
+        except Exception as e:
+            print(f"Error with OpenAI API call: {str(e)}")
+            try:
+                # Try with api_resources as a fallback
+                from openai.api_resources import ChatCompletion
+                response = ChatCompletion.create(
+                    api_key=openai.api_key,
+                    model=model,
+                    messages=messages,
+                    **kwargs
+                )
+                return response.choices[0].message["content"]
+            except Exception as e2:
+                print(f"Fallback also failed: {str(e2)}")
+                return f"Error: Could not generate response with OpenAI API version {openai.__version__}. Please update to OpenAI SDK v1.0.0 or higher."
 
 
 def openai_debug_completion_query(model, messages, **kwargs):
@@ -52,9 +86,48 @@ def openai_debug_completion_query(model, messages, **kwargs):
         response = client.chat.completions.create(model=model, messages=messages, **kwargs)
         return response.choices[0].message.content
     else:
-        # Legacy OpenAI API
-        response = client.ChatCompletion.create(model=model, messages=messages, **kwargs)
-        return response.choices[0].message["content"]
+        try:
+            # Legacy OpenAI API for versions around 0.27.x
+            if hasattr(client, "ChatCompletion"):
+                response = client.ChatCompletion.create(model=model, messages=messages, **kwargs)
+                # Extract content based on structure
+                if hasattr(response.choices[0], "message"):
+                    return response.choices[0].message["content"]
+                else:
+                    return response.choices[0]["message"]["content"]
+            else:
+                # For very old versions
+                print("Using direct completion API for older OpenAI versions")
+                prompt = _format_messages_as_prompt(messages)
+                response = client.Completion.create(engine=model, prompt=prompt, **kwargs)
+                return response.choices[0].text.strip()
+        except Exception as e:
+            print(f"Error with OpenAI API call: {str(e)}")
+            # Try with api_resources as a fallback
+            from openai.api_resources import ChatCompletion
+            response = ChatCompletion.create(
+                api_key=openai.api_key,
+                model=model,
+                messages=messages,
+                **kwargs
+            )
+            return response.choices[0].message["content"]
+
+
+def _format_messages_as_prompt(messages):
+    """Convert chat messages to a single prompt string for older API versions"""
+    prompt = ""
+    for msg in messages:
+        role = msg["role"]
+        content = msg["content"]
+        if role == "system":
+            prompt += f"System: {content}\n\n"
+        elif role == "user":
+            prompt += f"User: {content}\n\n"
+        elif role == "assistant":
+            prompt += f"Assistant: {content}\n\n"
+    prompt += "Assistant: "
+    return prompt
 
 
 def parse_guidance_query(query):

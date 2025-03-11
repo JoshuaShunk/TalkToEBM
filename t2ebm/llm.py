@@ -7,6 +7,7 @@ We interface the LLM via the simple class AbstractChatModel. To use your own LLM
 from dataclasses import dataclass
 import copy
 import os
+import sys
 from typing import Union
 
 # Detect OpenAI API version
@@ -17,7 +18,10 @@ try:
 except ImportError:
     # For OpenAI <v1.0
     import openai
+    import importlib
     OPENAI_V1 = False
+    # Print OpenAI version for debugging
+    print(f"Using OpenAI API version: {openai.__version__}")
 
 
 @dataclass
@@ -65,25 +69,76 @@ class OpenAIChatModel(AbstractChatModel):
                 print(f"Invalid response {response}")
                 response_content = ""
         else:
-            # Legacy OpenAI API
-            response = self.client.ChatCompletion.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                request_timeout=90,
-            )
-            # we return the completion string or "" if there is an invalid response/query
+            # Handle various versions of the legacy OpenAI API
             try:
-                response_content = response.choices[0].message["content"]
-            except:
-                print(f"Invalid response {response}")
-                response_content = ""
+                # Legacy OpenAI API method for versions around 0.27.x
+                if hasattr(self.client, "ChatCompletion"):
+                    response = self.client.ChatCompletion.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        request_timeout=90,
+                    )
+                    # Extract content based on response structure
+                    try:
+                        if hasattr(response.choices[0], "message"):
+                            response_content = response.choices[0].message["content"]
+                        else:
+                            response_content = response.choices[0]["message"]["content"]
+                    except Exception as e:
+                        print(f"Error extracting content: {e}")
+                        print(f"Response structure: {response}")
+                        response_content = ""
+                # For very old versions that might use a different structure
+                else:
+                    print("Using direct completion API for older OpenAI versions")
+                    response = self.client.Completion.create(
+                        engine=self.model,
+                        prompt=self._format_messages_as_prompt(messages),
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        request_timeout=90,
+                    )
+                    response_content = response.choices[0].text.strip()
+            except Exception as e:
+                print(f"Error with OpenAI API call: {str(e)}")
+                print(f"OpenAI version: {openai.__version__}")
+                print(f"Available client methods: {dir(self.client)}")
+                # Fallback to a more direct approach
+                try:
+                    from openai.api_resources import ChatCompletion
+                    response = ChatCompletion.create(
+                        api_key=openai.api_key,
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
+                    response_content = response.choices[0].message["content"]
+                except Exception as e2:
+                    print(f"Fallback also failed: {str(e2)}")
+                    response_content = f"Error: Could not generate response with OpenAI API version {openai.__version__}. Please update to OpenAI SDK v1.0.0 or higher."
         
         if response_content is None:
             print(f"Invalid response {response}")
             response_content = ""
         return response_content
+    
+    def _format_messages_as_prompt(self, messages):
+        """Convert chat messages to a single prompt string for older API versions"""
+        prompt = ""
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+            if role == "system":
+                prompt += f"System: {content}\n\n"
+            elif role == "user":
+                prompt += f"User: {content}\n\n"
+            elif role == "assistant":
+                prompt += f"Assistant: {content}\n\n"
+        prompt += "Assistant: "
+        return prompt
 
     def __repr__(self) -> str:
         return f"{self.model}"
