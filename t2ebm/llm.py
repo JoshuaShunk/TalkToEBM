@@ -159,30 +159,9 @@ def create_openai_client(azure=False):
         
     OPENAI_INIT_ATTEMPTED = True
     
-    # Print diagnostic information about the OpenAI package
-    if OPENAI_V1:
-        try:
-            from openai import version
-            print(f"OpenAI package version: {version.__version__}")
-        except ImportError:
-            print("Could not determine OpenAI package version")
-    else:
-        print(f"OpenAI package version: {openai.__version__}")
-    
-    # Check for proxy settings in environment
+    # Silently check for proxy settings in environment but don't print anything
     import os
     proxy_vars = [var for var in os.environ if "proxy" in var.lower()]
-    if proxy_vars:
-        print(f"Found proxy-related environment variables: {proxy_vars}")
-    
-    # Check for conflicting packages or configurations
-    try:
-        import sys
-        openai_related = [mod for mod in sys.modules if "openai" in mod.lower()]
-        if len(openai_related) > 1:
-            print(f"Multiple OpenAI-related modules loaded: {openai_related}")
-    except Exception as e:
-        print(f"Error checking modules: {e}")
     
     if not OPENAI_V1:
         # For older versions, just return the openai module
@@ -191,26 +170,16 @@ def create_openai_client(azure=False):
     # For OpenAI v1.0+
     api_key = os.environ.get("OPENAI_API_KEY")
     
-    # For debugging, check OpenAI class signature
-    try:
-        from openai import OpenAI
-        import inspect
-        print(f"OpenAI.__init__ signature: {inspect.signature(OpenAI.__init__)}")
-    except Exception as e:
-        print(f"Error inspecting OpenAI signature: {e}")
-    
     # Try directly creating the client with no parameters first
     try:
         if azure:
             from openai import AzureOpenAI
-            print("Attempting to create AzureOpenAI client with no parameters")
             return AzureOpenAI()
         else:
             from openai import OpenAI
-            print("Attempting to create OpenAI client with no parameters")
             return OpenAI()
-    except Exception as e:
-        print(f"Failed to initialize with no parameters: {str(e)}")
+    except Exception:
+        pass
     
     # Try with absolutely minimal parameters - just the API key
     try:
@@ -218,24 +187,20 @@ def create_openai_client(azure=False):
             azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
             azure_key = os.environ.get("AZURE_OPENAI_KEY")
             if not azure_endpoint or not azure_key:
-                print("Azure OpenAI endpoint or key not found in environment variables")
                 OPENAI_INIT_FAILED = True
                 return None
                 
             from openai import AzureOpenAI
-            print("Attempting to create AzureOpenAI client with minimal parameters")
             return AzureOpenAI(
                 azure_endpoint=azure_endpoint,
                 api_key=azure_key
             )
         else:
             if not api_key:
-                print("OpenAI API key not found in environment variables")
                 OPENAI_INIT_FAILED = True
                 return None
                 
             from openai import OpenAI
-            print("Attempting to create OpenAI client with API key only")
             # Try with a custom __init__ approach to bypass potential issues
             try:
                 # Create object then set attributes directly to avoid __init__ issues
@@ -249,12 +214,10 @@ def create_openai_client(azure=False):
                 
                 # Set required attributes
                 return client
-            except Exception as e:
-                print(f"Manual initialization failed: {e}")
+            except Exception:
                 # Try normal initialization as fallback
                 return OpenAI(api_key=api_key)
-    except Exception as e:
-        print(f"Failed to initialize OpenAI client with API key only: {e}")
+    except Exception:
         OPENAI_INIT_FAILED = True
         return None
 
