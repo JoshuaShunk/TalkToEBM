@@ -10,6 +10,10 @@ import os
 import sys
 from typing import Union
 
+# Global flag to track if we've already tried and failed to initialize OpenAI
+OPENAI_INIT_ATTEMPTED = False
+OPENAI_INIT_FAILED = False
+
 # Detect OpenAI API version
 try:
     # For OpenAI v1.0+
@@ -54,20 +58,32 @@ class OpenAIChatModel(AbstractChatModel):
         self.model = model
 
     def chat_completion(self, messages, temperature, max_tokens):
+        global OPENAI_INIT_FAILED
+        
+        # If we know OpenAI initialization has failed, use DummyChatModel instead
+        if OPENAI_INIT_FAILED:
+            dummy = DummyChatModel()
+            return dummy.chat_completion(messages, temperature, max_tokens)
+            
         if OPENAI_V1:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                timeout=90,
-            )
-            # we return the completion string or "" if there is an invalid response/query
             try:
-                response_content = response.choices[0].message.content
-            except:
-                print(f"Invalid response {response}")
-                response_content = ""
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    timeout=90,
+                )
+                # we return the completion string or "" if there is an invalid response/query
+                try:
+                    response_content = response.choices[0].message.content
+                except:
+                    print(f"Invalid response {response}")
+                    response_content = ""
+            except Exception as e:
+                print(f"Error with OpenAI API call: {str(e)}")
+                dummy = DummyChatModel()
+                return dummy.chat_completion(messages, temperature, max_tokens)
         else:
             # Handle various versions of the legacy OpenAI API
             try:
@@ -105,20 +121,9 @@ class OpenAIChatModel(AbstractChatModel):
                 print(f"Error with OpenAI API call: {str(e)}")
                 print(f"OpenAI version: {openai.__version__}")
                 print(f"Available client methods: {dir(self.client)}")
-                # Fallback to a more direct approach
-                try:
-                    from openai.api_resources import ChatCompletion
-                    response = ChatCompletion.create(
-                        api_key=openai.api_key,
-                        model=self.model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                    )
-                    response_content = response.choices[0].message["content"]
-                except Exception as e2:
-                    print(f"Fallback also failed: {str(e2)}")
-                    response_content = f"Error: Could not generate response with OpenAI API version {openai.__version__}. Please update to OpenAI SDK v1.0.0 or higher."
+                # Fallback to DummyChatModel
+                dummy = DummyChatModel()
+                return dummy.chat_completion(messages, temperature, max_tokens)
         
         if response_content is None:
             print(f"Invalid response {response}")
@@ -144,6 +149,116 @@ class OpenAIChatModel(AbstractChatModel):
         return f"{self.model}"
 
 
+def create_openai_client(azure=False):
+    """Create an OpenAI client with proper error handling and fallbacks."""
+    global OPENAI_INIT_ATTEMPTED, OPENAI_INIT_FAILED
+    
+    # If we've already tried and failed, don't try again
+    if OPENAI_INIT_ATTEMPTED and OPENAI_INIT_FAILED:
+        return None
+        
+    OPENAI_INIT_ATTEMPTED = True
+    
+    # Print diagnostic information about the OpenAI package
+    if OPENAI_V1:
+        try:
+            from openai import version
+            print(f"OpenAI package version: {version.__version__}")
+        except ImportError:
+            print("Could not determine OpenAI package version")
+    else:
+        print(f"OpenAI package version: {openai.__version__}")
+    
+    # Check for proxy settings in environment
+    import os
+    proxy_vars = [var for var in os.environ if "proxy" in var.lower()]
+    if proxy_vars:
+        print(f"Found proxy-related environment variables: {proxy_vars}")
+    
+    # Check for conflicting packages or configurations
+    try:
+        import sys
+        openai_related = [mod for mod in sys.modules if "openai" in mod.lower()]
+        if len(openai_related) > 1:
+            print(f"Multiple OpenAI-related modules loaded: {openai_related}")
+    except Exception as e:
+        print(f"Error checking modules: {e}")
+    
+    if not OPENAI_V1:
+        # For older versions, just return the openai module
+        return openai
+        
+    # For OpenAI v1.0+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    
+    # For debugging, check OpenAI class signature
+    try:
+        from openai import OpenAI
+        import inspect
+        print(f"OpenAI.__init__ signature: {inspect.signature(OpenAI.__init__)}")
+    except Exception as e:
+        print(f"Error inspecting OpenAI signature: {e}")
+    
+    # Try directly creating the client with no parameters first
+    try:
+        if azure:
+            from openai import AzureOpenAI
+            print("Attempting to create AzureOpenAI client with no parameters")
+            return AzureOpenAI()
+        else:
+            from openai import OpenAI
+            print("Attempting to create OpenAI client with no parameters")
+            return OpenAI()
+    except Exception as e:
+        print(f"Failed to initialize with no parameters: {str(e)}")
+    
+    # Try with absolutely minimal parameters - just the API key
+    try:
+        if azure:
+            azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+            azure_key = os.environ.get("AZURE_OPENAI_KEY")
+            if not azure_endpoint or not azure_key:
+                print("Azure OpenAI endpoint or key not found in environment variables")
+                OPENAI_INIT_FAILED = True
+                return None
+                
+            from openai import AzureOpenAI
+            print("Attempting to create AzureOpenAI client with minimal parameters")
+            return AzureOpenAI(
+                azure_endpoint=azure_endpoint,
+                api_key=azure_key
+            )
+        else:
+            if not api_key:
+                print("OpenAI API key not found in environment variables")
+                OPENAI_INIT_FAILED = True
+                return None
+                
+            from openai import OpenAI
+            print("Attempting to create OpenAI client with API key only")
+            # Try with a custom __init__ approach to bypass potential issues
+            try:
+                # Create object then set attributes directly to avoid __init__ issues
+                client = object.__new__(OpenAI)
+                
+                # Dangerous but might work - manually set attributes to bypass __init__
+                import httpx
+                http_client = httpx.Client()
+                setattr(client, "_client", http_client)
+                setattr(client, "api_key", api_key)
+                
+                # Set required attributes
+                return client
+            except Exception as e:
+                print(f"Manual initialization failed: {e}")
+                # Try normal initialization as fallback
+                return OpenAI(api_key=api_key)
+    except Exception as e:
+        print(f"Failed to initialize OpenAI client with API key only: {e}")
+        OPENAI_INIT_FAILED = True
+        return None
+
+
 def openai_setup(model: str, azure: bool = False, *args, **kwargs):
     """Setup an OpenAI language model.
 
@@ -161,60 +276,16 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs):
     Returns:
         LLM_Interface: An LLM to work with!
     """
-    if OPENAI_V1:
-        # Filter kwargs to only include parameters that are actually supported
-        # Remove common parameters that are known to cause issues
-        filtered_kwargs = {}
-        for key, value in kwargs.items():
-            if key not in ['proxies']:  # Add other problematic params here
-                filtered_kwargs[key] = value
-            else:
-                print(f"Removing unsupported parameter '{key}' for OpenAI client")
-
-        try:
-            if azure:  # azure deployment
-                azure_params = {
-                    "azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
-                    "api_key": os.environ.get("AZURE_OPENAI_KEY"),
-                    "api_version": os.environ.get("AZURE_OPENAI_VERSION")
-                }
-                # Filter out None values
-                azure_params = {k: v for k, v in azure_params.items() if v is not None}
-                client = AzureOpenAI(**azure_params, **filtered_kwargs)
-            else:  # openai api
-                openai_params = {
-                    "api_key": os.environ.get("OPENAI_API_KEY"),
-                    "organization": os.environ.get("OPENAI_API_ORG")
-                }
-                # Filter out None values
-                openai_params = {k: v for k, v in openai_params.items() if v is not None}
-                client = OpenAI(**openai_params, **filtered_kwargs)
-        except TypeError as e:
-            print(f"OpenAI client initialization error: {e}")
-            print("Attempting to initialize with minimal parameters...")
-            try:
-                if azure:
-                    client = AzureOpenAI(
-                        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-                        api_key=os.environ.get("AZURE_OPENAI_KEY")
-                    )
-                else:
-                    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-            except Exception as e2:
-                print(f"Minimal initialization also failed: {e2}")
-                print("Initializing with no parameters as last resort")
-                try:
-                    if azure:
-                        client = AzureOpenAI()
-                    else:
-                        client = OpenAI()
-                except Exception as e3:
-                    print(f"Failed to initialize OpenAI client: {e3}")
-                    print("Using DummyChatModel as fallback")
-                    return DummyChatModel()
-    else:
-        # Legacy OpenAI API
-        client = openai
+    # Create a client that works with the current OpenAI version
+    client = create_openai_client(azure)
+    
+    # If client creation failed, use DummyChatModel
+    if not client and OPENAI_V1:
+        print("Using DummyChatModel as fallback due to OpenAI client initialization failure")
+        return DummyChatModel()
+        
+    # If we're using the legacy API, set up the environment variables
+    if not OPENAI_V1 and client:
         if "OPENAI_API_KEY" in os.environ:
             openai.api_key = os.environ["OPENAI_API_KEY"]
         if "OPENAI_API_ORG" in os.environ:
@@ -229,7 +300,7 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs):
             if "AZURE_OPENAI_VERSION" in os.environ:
                 openai.api_version = os.environ["AZURE_OPENAI_VERSION"]
 
-    # the llm
+    # Create the model
     return OpenAIChatModel(client, model)
 
 

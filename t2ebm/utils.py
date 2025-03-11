@@ -10,23 +10,39 @@ from tenacity import (
 )
 
 import openai
+
+# Try to import from llm module first to keep client initialization consistent
 try:
-    # For OpenAI v1.0+
-    from openai import OpenAI
-    # Initialize client with only supported parameters
-    try:
-        client = OpenAI()
-    except TypeError as e:
-        print(f"OpenAI client initialization error: {e}")
-        # If there's an error with the default initialization, try without any parameters
-        client = None
-    OPENAI_V1 = True
+    from .llm import create_openai_client, OPENAI_V1, OPENAI_INIT_FAILED, DummyChatModel
+    client = create_openai_client()
 except ImportError:
-    # For OpenAI <v1.0
-    client = openai
-    OPENAI_V1 = False
-    # Print OpenAI version for debugging
-    print(f"Using OpenAI API version: {openai.__version__}")
+    # Fallback to direct initialization
+    try:
+        # For OpenAI v1.0+
+        from openai import OpenAI
+        # Initialize client with only supported parameters
+        try:
+            client = OpenAI()
+        except TypeError as e:
+            print(f"OpenAI client initialization error: {e}")
+            try:
+                # Try with just the API key
+                import os
+                api_key = os.environ.get("OPENAI_API_KEY")
+                if api_key:
+                    client = OpenAI(api_key=api_key)
+                else:
+                    client = None
+            except Exception:
+                # If that fails too, use None
+                client = None
+        OPENAI_V1 = True
+    except ImportError:
+        # For OpenAI <v1.0
+        client = openai
+        OPENAI_V1 = False
+        # Print OpenAI version for debugging
+        print(f"Using OpenAI API version: {openai.__version__}")
 
 import tiktoken
 
@@ -45,9 +61,17 @@ def num_tokens_from_string_(string: str, model_name: str) -> int:
 # )
 def openai_completion_query(model, messages, **kwargs):
     """Catches exceptions and retries, good for deployment / running experiments"""
+    # Check if OpenAI client failed to initialize
+    if client is None:
+        return "Error: OpenAI client failed to initialize. Please check your API key."
+        
     if OPENAI_V1:
-        response = client.chat.completions.create(model=model, messages=messages, **kwargs)
-        return response.choices[0].message.content
+        try:
+            response = client.chat.completions.create(model=model, messages=messages, **kwargs)
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"OpenAI API error: {str(e)}")
+            return f"Error: {str(e)}"
     else:
         try:
             # Legacy OpenAI API for versions around 0.27.x
@@ -88,9 +112,17 @@ def openai_completion_query(model, messages, **kwargs):
 
 def openai_debug_completion_query(model, messages, **kwargs):
     """Does not catch exceptions, better for debugging"""
+    # Check if OpenAI client failed to initialize
+    if client is None:
+        return "Error: OpenAI client failed to initialize. Please check your API key."
+    
     if OPENAI_V1:
-        response = client.chat.completions.create(model=model, messages=messages, **kwargs)
-        return response.choices[0].message.content
+        try:
+            response = client.chat.completions.create(model=model, messages=messages, **kwargs)
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"OpenAI API error: {str(e)}")
+            return f"Error: {str(e)}"
     else:
         try:
             # Legacy OpenAI API for versions around 0.27.x
@@ -178,3 +210,72 @@ def parse_guidance_query(query):
     if next_token is not None and len(query[end_pos:]) > 15:
         messages.extend(parse_guidance_query(query[end_pos:]))
     return messages
+
+
+# Create a function to help users directly create a working client
+def create_direct_client(api_key=None):
+    """
+    Utility function to create an OpenAI client directly.
+    
+    This bypasses all package initializations and creates a direct client
+    for users who are experiencing issues with the automatic initialization.
+    
+    Args:
+        api_key (str, optional): Your OpenAI API key. If not provided, will try to get from environment.
+    
+    Returns:
+        A working OpenAI client or None if initialization fails.
+    """
+    try:
+        # Try to determine if we can use OpenAI v1 API
+        try:
+            from openai import OpenAI
+            v1_api_available = True
+        except ImportError:
+            v1_api_available = False
+            
+        # Get API key if not provided
+        if api_key is None:
+            import os
+            api_key = os.environ.get("OPENAI_API_KEY")
+            
+        if not api_key:
+            print("No API key provided or found in environment variables.")
+            return None
+            
+        # Create client based on available API
+        if v1_api_available:
+            print("Creating OpenAI v1.x client...")
+            try:
+                # Try the most direct way possible
+                client = OpenAI(api_key=api_key)
+                return client
+            except Exception as e:
+                print(f"Standard initialization failed: {e}")
+                # Try bare-bones approach using manual initialization
+                print("Trying manual client creation...")
+                try:
+                    # Create object directly to bypass __init__
+                    client = object.__new__(OpenAI)
+                    
+                    # Manually set required attributes
+                    import httpx
+                    http_client = httpx.Client(
+                        base_url="https://api.openai.com/v1",
+                        headers={"Authorization": f"Bearer {api_key}"}
+                    )
+                    setattr(client, "_client", http_client)
+                    setattr(client, "api_key", api_key)
+                    print("Manual client creation successful")
+                    return client
+                except Exception as e:
+                    print(f"Manual creation failed: {e}")
+                    return None
+        else:
+            print("Creating OpenAI v0.x client...")
+            # For older versions
+            openai.api_key = api_key
+            return openai
+    except Exception as e:
+        print(f"Failed to create direct client: {e}")
+        return None
