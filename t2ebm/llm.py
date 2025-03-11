@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import copy
 import os
 import sys
-from typing import Union
+from typing import Union, List, Dict, Any, Optional
 
 # Global flag to track if we've already tried and failed to initialize OpenAI
 OPENAI_INIT_ATTEMPTED = False
@@ -22,15 +22,15 @@ try:
 except ImportError:
     # For OpenAI <v1.0
     import openai
-    import importlib
     OPENAI_V1 = False
-    # Print OpenAI version for debugging
-    print(f"Using OpenAI API version: {openai.__version__}")
 
 
 @dataclass
 class AbstractChatModel:
-    def chat_completion(self, messages, temperature: float, max_tokens: int):
+    """
+    Abstract base class for chat models. Implement chat_completion to create a custom model.
+    """
+    def chat_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
         """Send a query to a chat model.
 
         :param messages: The messages to send to the model. We use the OpenAI format.
@@ -44,20 +44,46 @@ class AbstractChatModel:
 
 
 class DummyChatModel(AbstractChatModel):
-    def chat_completion(self, messages, temperature: float, max_tokens: int):
+    """
+    A dummy chat model for testing or fallback when real models aren't available.
+    """
+    def chat_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
+        """Return a dummy response regardless of input."""
         return "Hihi, this is the dummy chat model! I hope you find me useful for debugging."
 
 
 class OpenAIChatModel(AbstractChatModel):
+    """
+    Chat model that uses the OpenAI API.
+    Compatible with both v1.0+ and older versions of the API.
+    """
     client = None
     model: str = None
 
-    def __init__(self, client, model):
+    def __init__(self, client, model: str):
+        """
+        Initialize with an OpenAI client and model name.
+        
+        Args:
+            client: OpenAI client (v1.0+ or older version)
+            model: The model name to use
+        """
         super().__init__()
         self.client = client
         self.model = model
 
-    def chat_completion(self, messages, temperature, max_tokens):
+    def chat_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
+        """
+        Send a chat completion request to the OpenAI API.
+        
+        Args:
+            messages: The messages to send to the model
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            
+        Returns:
+            str: The model's response
+        """
         global OPENAI_INIT_FAILED
         
         # If we know OpenAI initialization has failed, use DummyChatModel instead
@@ -65,8 +91,9 @@ class OpenAIChatModel(AbstractChatModel):
             dummy = DummyChatModel()
             return dummy.chat_completion(messages, temperature, max_tokens)
             
-        if OPENAI_V1:
-            try:
+        try:
+            # Handle OpenAI v1.0+ API
+            if OPENAI_V1:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
@@ -74,64 +101,52 @@ class OpenAIChatModel(AbstractChatModel):
                     max_tokens=max_tokens,
                     timeout=90,
                 )
-                # we return the completion string or "" if there is an invalid response/query
-                try:
-                    response_content = response.choices[0].message.content
-                except:
-                    print(f"Invalid response {response}")
+                # Extract the completion text
+                response_content = getattr(response.choices[0].message, "content", "")
+                if response_content is None:
                     response_content = ""
-            except Exception as e:
-                print(f"Error with OpenAI API call: {str(e)}")
-                dummy = DummyChatModel()
-                return dummy.chat_completion(messages, temperature, max_tokens)
-        else:
-            # Handle various versions of the legacy OpenAI API
-            try:
-                # Legacy OpenAI API method for versions around 0.27.x
-                if hasattr(self.client, "ChatCompletion"):
-                    response = self.client.ChatCompletion.create(
-                        model=self.model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        request_timeout=90,
-                    )
-                    # Extract content based on response structure
-                    try:
-                        if hasattr(response.choices[0], "message"):
-                            response_content = response.choices[0].message["content"]
-                        else:
-                            response_content = response.choices[0]["message"]["content"]
-                    except Exception as e:
-                        print(f"Error extracting content: {e}")
-                        print(f"Response structure: {response}")
-                        response_content = ""
-                # For very old versions that might use a different structure
-                else:
-                    print("Using direct completion API for older OpenAI versions")
-                    response = self.client.Completion.create(
-                        engine=self.model,
-                        prompt=self._format_messages_as_prompt(messages),
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        request_timeout=90,
-                    )
-                    response_content = response.choices[0].text.strip()
-            except Exception as e:
-                print(f"Error with OpenAI API call: {str(e)}")
-                print(f"OpenAI version: {openai.__version__}")
-                print(f"Available client methods: {dir(self.client)}")
-                # Fallback to DummyChatModel
-                dummy = DummyChatModel()
-                return dummy.chat_completion(messages, temperature, max_tokens)
-        
-        if response_content is None:
-            print(f"Invalid response {response}")
-            response_content = ""
-        return response_content
+                return response_content
+                
+            # Handle older OpenAI API versions
+            if hasattr(self.client, "ChatCompletion"):
+                response = self.client.ChatCompletion.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    request_timeout=90,
+                )
+                # Extract content based on structure
+                if hasattr(response.choices[0], "message"):
+                    return response.choices[0].message["content"] or ""
+                return response.choices[0]["message"]["content"] or ""
+                
+            # For very old versions that might use a different structure
+            prompt = self._format_messages_as_prompt(messages)
+            response = self.client.Completion.create(
+                engine=self.model,
+                prompt=prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                request_timeout=90,
+            )
+            return response.choices[0].text.strip()
+            
+        except Exception:
+            # Fall back to dummy model
+            dummy = DummyChatModel()
+            return dummy.chat_completion(messages, temperature, max_tokens)
     
-    def _format_messages_as_prompt(self, messages):
-        """Convert chat messages to a single prompt string for older API versions"""
+    def _format_messages_as_prompt(self, messages: List[Dict[str, Any]]) -> str:
+        """
+        Convert chat messages to a single prompt string for older API versions.
+        
+        Args:
+            messages: List of message dictionaries
+            
+        Returns:
+            str: Formatted prompt string
+        """
         prompt = ""
         for msg in messages:
             role = msg["role"]
@@ -146,11 +161,25 @@ class OpenAIChatModel(AbstractChatModel):
         return prompt
 
     def __repr__(self) -> str:
+        """
+        String representation of the model.
+        
+        Returns:
+            str: The model name
+        """
         return f"{self.model}"
 
 
-def create_openai_client(azure=False):
-    """Create an OpenAI client with proper error handling and fallbacks."""
+def create_openai_client(azure: bool = False) -> Optional[Any]:
+    """
+    Create an OpenAI client with proper error handling and fallbacks.
+    
+    Args:
+        azure: Whether to create an Azure OpenAI client
+        
+    Returns:
+        The OpenAI client or None if initialization failed
+    """
     global OPENAI_INIT_ATTEMPTED, OPENAI_INIT_FAILED
     
     # If we've already tried and failed, don't try again
@@ -160,7 +189,6 @@ def create_openai_client(azure=False):
     OPENAI_INIT_ATTEMPTED = True
     
     # Silently check for proxy settings in environment but don't print anything
-    import os
     proxy_vars = [var for var in os.environ if "proxy" in var.lower()]
     
     if not OPENAI_V1:
@@ -222,14 +250,15 @@ def create_openai_client(azure=False):
         return None
 
 
-def openai_setup(model: str, azure: bool = False, *args, **kwargs):
-    """Setup an OpenAI language model.
+def openai_setup(model: str, azure: bool = False, *args, **kwargs) -> AbstractChatModel:
+    """
+    Setup an OpenAI language model.
 
-    :param model: The name of the model (e.g. "gpt-3.5-turbo-0613").
-    :param azure: If true, use a model deployed on azure.
+    Args:
+        model: The name of the model (e.g. "gpt-3.5-turbo-0613").
+        azure: If true, use a model deployed on azure.
 
     This function uses the following environment variables:
-
     - OPENAI_API_KEY
     - OPENAI_API_ORG
     - AZURE_OPENAI_ENDPOINT
@@ -237,14 +266,13 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs):
     - AZURE_OPENAI_VERSION
 
     Returns:
-        LLM_Interface: An LLM to work with!
+        AbstractChatModel: An LLM to work with
     """
     # Create a client that works with the current OpenAI version
     client = create_openai_client(azure)
     
     # If client creation failed, use DummyChatModel
     if not client and OPENAI_V1:
-        print("Using DummyChatModel as fallback due to OpenAI client initialization failure")
         return DummyChatModel()
         
     # If we're using the legacy API, set up the environment variables
@@ -267,33 +295,57 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs):
     return OpenAIChatModel(client, model)
 
 
-def setup(model: Union[AbstractChatModel, str]):
-    """Setup a chat model. If the input is a string, we assume that it is the name of an OpenAI model."""
+def setup(model: Union[AbstractChatModel, str]) -> AbstractChatModel:
+    """
+    Setup a chat model. If the input is a string, we assume that it is the name of an OpenAI model.
+    
+    Args:
+        model: Either an AbstractChatModel instance or a model name string
+        
+    Returns:
+        AbstractChatModel: The chat model
+    """
     if isinstance(model, str):
         model = openai_setup(model)
     return model
 
 
-def chat_completion(llm: Union[str, AbstractChatModel], messages):
-    """Execute a sequence of user and assistant messages with an AbstractChatModel.
+def chat_completion(llm: Union[str, AbstractChatModel], messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Execute a sequence of user and assistant messages with an AbstractChatModel.
 
     Sends multiple individual messages to the AbstractChatModel.
+    
+    Args:
+        llm: The language model to use
+        messages: The messages to process
+        
+    Returns:
+        List[Dict[str, Any]]: The processed messages
     """
     llm = setup(llm)
-    # we sequentially execute all assistant messages that do not have a content.
-    messages = copy.deepcopy(messages)  # do not alter the input
+    # Make a copy to avoid modifying the input
+    messages = copy.deepcopy(messages)
+    
+    # Process assistant messages that don't have content
     for msg_idx in range(len(messages)):
         if messages[msg_idx]["role"] == "assistant":
-            if not "content" in messages[msg_idx]:
-                # send message
+            if "content" not in messages[msg_idx]:
+                # Get required parameters
+                temperature = messages[msg_idx].get("temperature", 0.7)
+                max_tokens = messages[msg_idx].get("max_tokens", 1000)
+                
+                # Generate content
                 messages[msg_idx]["content"] = llm.chat_completion(
                     messages[:msg_idx],
-                    temperature=messages[msg_idx]["temperature"],
-                    max_tokens=messages[msg_idx]["max_tokens"],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                 )
-            # remove all keys except "role" and "content"
-            keys = list(messages[msg_idx].keys())
-            for k in keys:
-                if not k in ["role", "content"]:
-                    messages[msg_idx].pop(k)
+            
+            # Remove all keys except "role" and "content"
+            messages[msg_idx] = {
+                "role": messages[msg_idx]["role"],
+                "content": messages[msg_idx]["content"]
+            }
+            
     return messages
