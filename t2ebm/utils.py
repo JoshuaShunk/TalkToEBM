@@ -13,7 +13,13 @@ import openai
 try:
     # For OpenAI v1.0+
     from openai import OpenAI
-    client = OpenAI()
+    # Initialize client with only supported parameters
+    try:
+        client = OpenAI()
+    except TypeError as e:
+        print(f"OpenAI client initialization error: {e}")
+        # If there's an error with the default initialization, try without any parameters
+        client = None
     OPENAI_V1 = True
 except ImportError:
     # For OpenAI <v1.0

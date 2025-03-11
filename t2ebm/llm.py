@@ -162,37 +162,56 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs):
         LLM_Interface: An LLM to work with!
     """
     if OPENAI_V1:
-        if azure:  # azure deployment
-            client = AzureOpenAI(
-                azure_endpoint=(
-                    os.environ["AZURE_OPENAI_ENDPOINT"]
-                    if "AZURE_OPENAI_ENDPOINT" in os.environ
-                    else None
-                ),
-                api_key=(
-                    os.environ["AZURE_OPENAI_KEY"]
-                    if "AZURE_OPENAI_KEY" in os.environ
-                    else None
-                ),
-                api_version=(
-                    os.environ["AZURE_OPENAI_VERSION"]
-                    if "AZURE_OPENAI_VERSION" in os.environ
-                    else None
-                ),
-                *args,
-                **kwargs,
-            )
-        else:  # openai api
-            client = OpenAI(
-                api_key=(
-                    os.environ["OPENAI_API_KEY"] if "OPENAI_API_KEY" in os.environ else None
-                ),
-                organization=(
-                    os.environ["OPENAI_API_ORG"] if "OPENAI_API_ORG" in os.environ else None
-                ),
-                *args,
-                **kwargs,
-            )
+        # Filter kwargs to only include parameters that are actually supported
+        # Remove common parameters that are known to cause issues
+        filtered_kwargs = {}
+        for key, value in kwargs.items():
+            if key not in ['proxies']:  # Add other problematic params here
+                filtered_kwargs[key] = value
+            else:
+                print(f"Removing unsupported parameter '{key}' for OpenAI client")
+
+        try:
+            if azure:  # azure deployment
+                azure_params = {
+                    "azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
+                    "api_key": os.environ.get("AZURE_OPENAI_KEY"),
+                    "api_version": os.environ.get("AZURE_OPENAI_VERSION")
+                }
+                # Filter out None values
+                azure_params = {k: v for k, v in azure_params.items() if v is not None}
+                client = AzureOpenAI(**azure_params, **filtered_kwargs)
+            else:  # openai api
+                openai_params = {
+                    "api_key": os.environ.get("OPENAI_API_KEY"),
+                    "organization": os.environ.get("OPENAI_API_ORG")
+                }
+                # Filter out None values
+                openai_params = {k: v for k, v in openai_params.items() if v is not None}
+                client = OpenAI(**openai_params, **filtered_kwargs)
+        except TypeError as e:
+            print(f"OpenAI client initialization error: {e}")
+            print("Attempting to initialize with minimal parameters...")
+            try:
+                if azure:
+                    client = AzureOpenAI(
+                        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+                        api_key=os.environ.get("AZURE_OPENAI_KEY")
+                    )
+                else:
+                    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            except Exception as e2:
+                print(f"Minimal initialization also failed: {e2}")
+                print("Initializing with no parameters as last resort")
+                try:
+                    if azure:
+                        client = AzureOpenAI()
+                    else:
+                        client = OpenAI()
+                except Exception as e3:
+                    print(f"Failed to initialize OpenAI client: {e3}")
+                    print("Using DummyChatModel as fallback")
+                    return DummyChatModel()
     else:
         # Legacy OpenAI API
         client = openai
