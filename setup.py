@@ -37,5 +37,6 @@ setuptools.setup(
         "tenacity",
         "scipy",
         "interpret",
+        "requests>=2.25.0",
     ],
 )

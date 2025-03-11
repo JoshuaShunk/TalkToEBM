@@ -20,6 +20,7 @@ Features:
 - [x] Ask the LLM to describe and summarize individual graphs or entire models.
 - [x] Modular approach that allows to write custom prompts - ask the LLM to perform any desired task with the EBM.
 - [x] Automatic simplification of minor details in graphs to stay within the desired token limit.
+- [x] Support for both OpenAI and local LLMs (like Ollama) for privacy and cost-sensitive applications.
 
 # Installation
 
@@ -110,7 +111,7 @@ t2ebm.describe_ebm('gpt-4-turbo-2024-04-09',
 
 > **GPT-4:** *The Generalized Additive Model (GAM) used for analyzing the Spaceship Titanic
 anomaly provides crucial insights into factors influencing the likelihood of
-passengers being transported to an alternate dimension. Here’s a concise summary
+passengers being transported to an alternate dimension. Here's a concise summary
 of the most impactful features:
 >  1. **CryoSleep**: This feature significantly
 affects the outcome, with passengers in cryosleep more likely to be transported
@@ -262,3 +263,59 @@ If you use this software in your research, please consider citing our research p
   year      = {2023}
  }
 ```
+
+# Using Local LLMs (like Ollama)
+
+TalkToEBM now supports local LLMs like Ollama as an alternative to OpenAI models. This allows you to use large language models locally without sending data to external APIs, which can be important for privacy, cost, or offline usage.
+
+## Setting up Ollama
+
+First, make sure you have Ollama installed and running. You can download Ollama from [https://ollama.ai/](https://ollama.ai/) and follow their installation instructions.
+
+Once Ollama is running, you can pull a model like llama2 or minstral:
+
+```sh
+ollama pull llama2
+```
+
+## Using Local LLMs with TalkToEBM
+
+To use a local LLM, you can specify a dictionary with the provider, model name, and base URL instead of an OpenAI model name:
+
+```python
+import t2ebm
+
+# Define a local LLM configuration
+local_llm = {
+    "provider": "ollama",               # Use "ollama" or "local"
+    "model": "llama2",                  # Name of the model you've pulled into Ollama
+    "base_url": "http://localhost:11434" # URL where Ollama is running
+}
+
+# Use the local LLM to describe a graph
+t2ebm.describe_graph(local_llm, ebm, 0)
+```
+
+You can also use other local LLM servers that follow the OpenAI API format by using a generic configuration:
+
+```python
+# Example for a server following OpenAI API format
+local_openai_compatible = {
+    "provider": "local",
+    "model": "your-model-name",
+    "base_url": "http://localhost:8000"  # Your server address
+}
+
+t2ebm.describe_graph(local_openai_compatible, ebm, 0)
+```
+
+## Comparison with OpenAI
+
+Local LLMs like those available through Ollama may not achieve the same level of sophistication as the latest OpenAI models, but they offer several advantages:
+
+1. **Privacy**: Your data stays on your local machine
+2. **No API costs**: Avoid per-token charges from commercial APIs
+3. **Offline operation**: Work without an internet connection
+4. **Customization**: Use specialized models fine-tuned for your domain
+
+Remember that local models generally require more computing resources, especially RAM and a capable GPU for optimal performance.

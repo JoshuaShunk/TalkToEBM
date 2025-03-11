@@ -8,6 +8,8 @@ from dataclasses import dataclass
 import copy
 import os
 import sys
+import json
+import requests
 from typing import Union, List, Dict, Any, Optional
 
 # Global flag to track if we've already tried and failed to initialize OpenAI
@@ -35,6 +37,11 @@ class OpenAICompletionError(Exception):
     pass
 
 
+class LocalLLMError(Exception):
+    """Exception raised when a local LLM request fails."""
+    pass
+
+
 @dataclass
 class AbstractChatModel:
     """
@@ -51,6 +58,181 @@ class AbstractChatModel:
             str: The model response.
         """
         raise NotImplementedError
+
+
+class LocalLLMChatModel(AbstractChatModel):
+    """
+    Chat model that uses a local LLM API (like Ollama) via HTTP.
+    Compatible with Ollama and other APIs that use a similar format.
+    """
+    
+    def __init__(self, base_url: str, model: str):
+        """
+        Initialize with a base URL and model name.
+        
+        Args:
+            base_url: The base URL for the LLM API (e.g., 'http://localhost:11434')
+            model: The name of the model to use (e.g., 'llama2')
+        """
+        super().__init__()
+        if not base_url:
+            raise LocalLLMError("Base URL for local LLM is required")
+        
+        # Remove trailing slash if present
+        if base_url.endswith('/'):
+            base_url = base_url[:-1]
+            
+        self.base_url = base_url
+        self.model = model
+        
+        # Detect API type (Ollama or other)
+        if "ollama" in base_url.lower() or self._is_ollama():
+            self.api_type = "ollama"
+        else:
+            self.api_type = "generic"
+            
+        # Test the connection
+        self._test_connection()
+    
+    def _is_ollama(self) -> bool:
+        """
+        Test if the API is Ollama by checking for Ollama-specific endpoints.
+        
+        Returns:
+            bool: True if Ollama API, False otherwise
+        """
+        try:
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            return response.status_code == 200
+        except Exception:
+            return False
+    
+    def _test_connection(self) -> None:
+        """
+        Test the connection to the LLM API.
+        
+        Raises:
+            LocalLLMError: If the connection test fails
+        """
+        try:
+            if self.api_type == "ollama":
+                # Test with a simple model check for Ollama
+                url = f"{self.base_url}/api/tags"
+                response = requests.get(url, timeout=5)
+                if response.status_code != 200:
+                    raise LocalLLMError(f"Failed to connect to Ollama API at {self.base_url}: HTTP {response.status_code}")
+            else:
+                # Generic test - just make sure we can reach the server
+                url = self.base_url
+                response = requests.get(url, timeout=5)
+                if response.status_code >= 500:
+                    raise LocalLLMError(f"Failed to connect to LLM API at {self.base_url}: HTTP {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            raise LocalLLMError(f"Failed to connect to LLM API at {self.base_url}: {str(e)}")
+    
+    def chat_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
+        """
+        Send a chat completion request to the local LLM API.
+        
+        Args:
+            messages: The messages to send to the model
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            
+        Returns:
+            str: The model's response
+            
+        Raises:
+            LocalLLMError: If the completion request fails
+        """
+        try:
+            if self.api_type == "ollama":
+                return self._ollama_completion(messages, temperature, max_tokens)
+            else:
+                return self._generic_completion(messages, temperature, max_tokens)
+        except Exception as e:
+            raise LocalLLMError(f"Failed to complete request: {str(e)}")
+    
+    def _ollama_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
+        """
+        Send a completion request to an Ollama API.
+        
+        Args:
+            messages: The messages to send
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            
+        Returns:
+            str: The model's response
+        """
+        url = f"{self.base_url}/api/chat"
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False
+        }
+        
+        response = requests.post(url, json=payload, timeout=120)
+        
+        if response.status_code != 200:
+            raise LocalLLMError(f"Ollama API returned error status: {response.status_code} - {response.text}")
+        
+        response_data = response.json()
+        try:
+            # Extract the message content from the response
+            return response_data["message"]["content"]
+        except (KeyError, TypeError):
+            # Try a different format if the expected format is not found
+            if "response" in response_data:
+                return response_data["response"]
+            raise LocalLLMError(f"Unexpected response format from Ollama API: {response_data}")
+    
+    def _generic_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
+        """
+        Send a completion request to a generic API using OpenAI-like format.
+        
+        Args:
+            messages: The messages to send
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            
+        Returns:
+            str: The model's response
+        """
+        url = f"{self.base_url}/v1/chat/completions"
+        
+        # Use OpenAI-compatible format
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+        
+        response = requests.post(url, json=payload, timeout=120)
+        
+        if response.status_code != 200:
+            raise LocalLLMError(f"LLM API returned error status: {response.status_code} - {response.text}")
+        
+        response_data = response.json()
+        
+        try:
+            # Extract in OpenAI-compatible format
+            return response_data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            raise LocalLLMError(f"Unexpected response format from LLM API: {response_data}")
+
+    def __repr__(self) -> str:
+        """
+        String representation of the model.
+        
+        Returns:
+            str: Information about the model and API
+        """
+        return f"Local {self.api_type.capitalize()} LLM: {self.model} @ {self.base_url}"
 
 
 class OpenAIChatModel(AbstractChatModel):
@@ -171,7 +353,7 @@ class OpenAIChatModel(AbstractChatModel):
         Returns:
             str: The model name
         """
-        return f"{self.model}"
+        return f"OpenAI: {self.model}"
 
 
 def create_openai_client(azure: bool = False) -> Optional[Any]:
@@ -309,32 +491,89 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs) -> AbstractCh
     return OpenAIChatModel(client, model)
 
 
-def setup(model: Union[AbstractChatModel, str]) -> AbstractChatModel:
+def local_llm_setup(model: str, base_url: str) -> AbstractChatModel:
     """
-    Setup a chat model. If the input is a string, we assume that it is the name of an OpenAI model.
+    Setup a local LLM (like Ollama).
     
     Args:
-        model: Either an AbstractChatModel instance or a model name string
+        model: The name of the model to use (e.g., "llama2")
+        base_url: The base URL for the LLM API (e.g., "http://localhost:11434")
+        
+    Returns:
+        AbstractChatModel: A local LLM chat model
+        
+    Raises:
+        LocalLLMError: If initialization fails
+    """
+    return LocalLLMChatModel(base_url, model)
+
+
+def setup(model: Union[AbstractChatModel, str, Dict[str, Any]]) -> AbstractChatModel:
+    """
+    Setup a chat model. Supports multiple ways to specify the model:
+    
+    1. If the input is an AbstractChatModel instance, return it directly.
+    2. If the input is a string, assume it's an OpenAI model name.
+    3. If the input is a dict with "provider", "model", and other settings, use those.
+    
+    Args:
+        model: Either an AbstractChatModel instance, a string (OpenAI model name),
+              or a dict with provider/model/settings info
         
     Returns:
         AbstractChatModel: The chat model
         
     Raises:
         OpenAIInitializationError: If OpenAI model setup fails
+        LocalLLMError: If local LLM setup fails
+        ValueError: If the model specification is invalid
     """
+    # If already a model instance, just return it
+    if isinstance(model, AbstractChatModel):
+        return model
+        
+    # If a string, assume it's an OpenAI model name
     if isinstance(model, str):
-        model = openai_setup(model)
-    return model
+        return openai_setup(model)
+        
+    # If a dict, check the provider and set up accordingly
+    if isinstance(model, dict):
+        provider = model.get("provider", "openai").lower()
+        
+        if provider == "openai":
+            # Set up OpenAI client
+            model_name = model.get("model", "gpt-3.5-turbo")
+            azure = model.get("azure", False)
+            return openai_setup(model_name, azure)
+            
+        elif provider in ["local", "ollama"]:
+            # Set up local LLM
+            model_name = model.get("model", "llama2")
+            base_url = model.get("base_url")
+            if not base_url:
+                raise ValueError("base_url is required for local LLM setup")
+            return local_llm_setup(model_name, base_url)
+            
+        else:
+            raise ValueError(f"Unsupported provider: {provider}. Supported: 'openai', 'local', 'ollama'")
+    
+    # If we got here, the input format is invalid
+    raise ValueError(
+        "Invalid model specification. Must be either: "
+        "1. An AbstractChatModel instance, "
+        "2. A string (OpenAI model name), or "
+        "3. A dict with 'provider', 'model', and other settings."
+    )
 
 
-def chat_completion(llm: Union[str, AbstractChatModel], messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def chat_completion(llm: Union[str, AbstractChatModel, Dict[str, Any]], messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Execute a sequence of user and assistant messages with an AbstractChatModel.
 
     Sends multiple individual messages to the AbstractChatModel.
     
     Args:
-        llm: The language model to use
+        llm: The language model to use (string, AbstractChatModel instance, or dict)
         messages: The messages to process
         
     Returns:
@@ -343,6 +582,7 @@ def chat_completion(llm: Union[str, AbstractChatModel], messages: List[Dict[str,
     Raises:
         OpenAIInitializationError: If model initialization fails
         OpenAICompletionError: If a completion request fails
+        LocalLLMError: If a local LLM request fails
     """
     llm = setup(llm)
     # Make a copy to avoid modifying the input
