@@ -25,6 +25,16 @@ except ImportError:
     OPENAI_V1 = False
 
 
+class OpenAIInitializationError(Exception):
+    """Exception raised when OpenAI client initialization fails."""
+    pass
+
+
+class OpenAICompletionError(Exception):
+    """Exception raised when OpenAI completion fails."""
+    pass
+
+
 @dataclass
 class AbstractChatModel:
     """
@@ -41,15 +51,6 @@ class AbstractChatModel:
             str: The model response.
         """
         raise NotImplementedError
-
-
-class DummyChatModel(AbstractChatModel):
-    """
-    A dummy chat model for testing or fallback when real models aren't available.
-    """
-    def chat_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
-        """Return a dummy response regardless of input."""
-        return "Hihi, this is the dummy chat model! I hope you find me useful for debugging."
 
 
 class OpenAIChatModel(AbstractChatModel):
@@ -69,6 +70,8 @@ class OpenAIChatModel(AbstractChatModel):
             model: The model name to use
         """
         super().__init__()
+        if client is None:
+            raise OpenAIInitializationError("OpenAI client is not initialized. Check your API key and environment.")
         self.client = client
         self.model = model
 
@@ -83,13 +86,15 @@ class OpenAIChatModel(AbstractChatModel):
             
         Returns:
             str: The model's response
+            
+        Raises:
+            OpenAICompletionError: If the completion request fails
         """
         global OPENAI_INIT_FAILED
         
-        # If we know OpenAI initialization has failed, use DummyChatModel instead
+        # If we know OpenAI initialization has failed, raise exception
         if OPENAI_INIT_FAILED:
-            dummy = DummyChatModel()
-            return dummy.chat_completion(messages, temperature, max_tokens)
+            raise OpenAIInitializationError("OpenAI initialization previously failed.")
             
         try:
             # Handle OpenAI v1.0+ API
@@ -132,10 +137,9 @@ class OpenAIChatModel(AbstractChatModel):
             )
             return response.choices[0].text.strip()
             
-        except Exception:
-            # Fall back to dummy model
-            dummy = DummyChatModel()
-            return dummy.chat_completion(messages, temperature, max_tokens)
+        except Exception as e:
+            # Raise an exception with the error details
+            raise OpenAICompletionError(f"Failed to complete request: {str(e)}")
     
     def _format_messages_as_prompt(self, messages: List[Dict[str, Any]]) -> str:
         """
@@ -172,19 +176,22 @@ class OpenAIChatModel(AbstractChatModel):
 
 def create_openai_client(azure: bool = False) -> Optional[Any]:
     """
-    Create an OpenAI client with proper error handling and fallbacks.
+    Create an OpenAI client with proper error handling.
     
     Args:
         azure: Whether to create an Azure OpenAI client
         
     Returns:
-        The OpenAI client or None if initialization failed
+        The OpenAI client
+        
+    Raises:
+        OpenAIInitializationError: If client initialization fails
     """
     global OPENAI_INIT_ATTEMPTED, OPENAI_INIT_FAILED
     
     # If we've already tried and failed, don't try again
     if OPENAI_INIT_ATTEMPTED and OPENAI_INIT_FAILED:
-        return None
+        raise OpenAIInitializationError("OpenAI client initialization has already failed.")
         
     OPENAI_INIT_ATTEMPTED = True
     
@@ -197,6 +204,9 @@ def create_openai_client(azure: bool = False) -> Optional[Any]:
         
     # For OpenAI v1.0+
     api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key and not azure:
+        OPENAI_INIT_FAILED = True
+        raise OpenAIInitializationError("OPENAI_API_KEY environment variable is not set.")
     
     # Try directly creating the client with no parameters first
     try:
@@ -216,7 +226,7 @@ def create_openai_client(azure: bool = False) -> Optional[Any]:
             azure_key = os.environ.get("AZURE_OPENAI_KEY")
             if not azure_endpoint or not azure_key:
                 OPENAI_INIT_FAILED = True
-                return None
+                raise OpenAIInitializationError("AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_KEY environment variables are not set.")
                 
             from openai import AzureOpenAI
             return AzureOpenAI(
@@ -224,17 +234,13 @@ def create_openai_client(azure: bool = False) -> Optional[Any]:
                 api_key=azure_key
             )
         else:
-            if not api_key:
-                OPENAI_INIT_FAILED = True
-                return None
-                
             from openai import OpenAI
             # Try with a custom __init__ approach to bypass potential issues
             try:
                 # Create object then set attributes directly to avoid __init__ issues
                 client = object.__new__(OpenAI)
                 
-                # Dangerous but might work - manually set attributes to bypass __init__
+                # Manually set attributes to bypass __init__
                 import httpx
                 http_client = httpx.Client()
                 setattr(client, "_client", http_client)
@@ -245,9 +251,9 @@ def create_openai_client(azure: bool = False) -> Optional[Any]:
             except Exception:
                 # Try normal initialization as fallback
                 return OpenAI(api_key=api_key)
-    except Exception:
+    except Exception as e:
         OPENAI_INIT_FAILED = True
-        return None
+        raise OpenAIInitializationError(f"Failed to initialize OpenAI client: {str(e)}")
 
 
 def openai_setup(model: str, azure: bool = False, *args, **kwargs) -> AbstractChatModel:
@@ -266,19 +272,21 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs) -> AbstractCh
     - AZURE_OPENAI_VERSION
 
     Returns:
-        AbstractChatModel: An LLM to work with
+        AbstractChatModel: An OpenAI chat model
+        
+    Raises:
+        OpenAIInitializationError: If initialization fails
     """
     # Create a client that works with the current OpenAI version
     client = create_openai_client(azure)
     
-    # If client creation failed, use DummyChatModel
-    if not client and OPENAI_V1:
-        return DummyChatModel()
-        
     # If we're using the legacy API, set up the environment variables
     if not OPENAI_V1 and client:
         if "OPENAI_API_KEY" in os.environ:
             openai.api_key = os.environ["OPENAI_API_KEY"]
+        elif not azure:
+            raise OpenAIInitializationError("OPENAI_API_KEY environment variable is not set.")
+            
         if "OPENAI_API_ORG" in os.environ:
             openai.organization = os.environ["OPENAI_API_ORG"]
         
@@ -286,8 +294,14 @@ def openai_setup(model: str, azure: bool = False, *args, **kwargs) -> AbstractCh
             openai.api_type = "azure"
             if "AZURE_OPENAI_ENDPOINT" in os.environ:
                 openai.api_base = os.environ["AZURE_OPENAI_ENDPOINT"]
+            else:
+                raise OpenAIInitializationError("AZURE_OPENAI_ENDPOINT environment variable is not set.")
+                
             if "AZURE_OPENAI_KEY" in os.environ:
                 openai.api_key = os.environ["AZURE_OPENAI_KEY"]
+            else:
+                raise OpenAIInitializationError("AZURE_OPENAI_KEY environment variable is not set.")
+                
             if "AZURE_OPENAI_VERSION" in os.environ:
                 openai.api_version = os.environ["AZURE_OPENAI_VERSION"]
 
@@ -304,6 +318,9 @@ def setup(model: Union[AbstractChatModel, str]) -> AbstractChatModel:
         
     Returns:
         AbstractChatModel: The chat model
+        
+    Raises:
+        OpenAIInitializationError: If OpenAI model setup fails
     """
     if isinstance(model, str):
         model = openai_setup(model)
@@ -322,6 +339,10 @@ def chat_completion(llm: Union[str, AbstractChatModel], messages: List[Dict[str,
         
     Returns:
         List[Dict[str, Any]]: The processed messages
+        
+    Raises:
+        OpenAIInitializationError: If model initialization fails
+        OpenAICompletionError: If a completion request fails
     """
     llm = setup(llm)
     # Make a copy to avoid modifying the input

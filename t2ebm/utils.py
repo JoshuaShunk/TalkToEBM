@@ -11,7 +11,8 @@ import tiktoken
 
 # Try to import from llm module first to keep client initialization consistent
 try:
-    from .llm import create_openai_client, OPENAI_V1, OPENAI_INIT_FAILED, DummyChatModel
+    from .llm import (create_openai_client, OPENAI_V1, OPENAI_INIT_FAILED, 
+                     OpenAIInitializationError, OpenAICompletionError)
     client = create_openai_client()
 except ImportError:
     # Fallback to direct initialization
@@ -30,6 +31,15 @@ except ImportError:
         # For OpenAI <v1.0
         client = openai
         OPENAI_V1 = False
+    
+    # Define exception classes if importing from llm failed
+    class OpenAIInitializationError(Exception):
+        """Exception raised when OpenAI client initialization fails."""
+        pass
+    
+    class OpenAICompletionError(Exception):
+        """Exception raised when OpenAI completion fails."""
+        pass
 
 
 def num_tokens_from_string_(string: str, model_name: str) -> int:
@@ -50,10 +60,14 @@ def openai_completion_query(model, messages, **kwargs):
         
     Returns:
         str: The model's response text
+        
+    Raises:
+        OpenAIInitializationError: If the client is not initialized
+        OpenAICompletionError: If the completion request fails
     """
     # Check if OpenAI client failed to initialize
     if client is None:
-        return "Error: OpenAI client failed to initialize. Please check your API key."
+        raise OpenAIInitializationError("OpenAI client failed to initialize. Please check your API key.")
     
     # Handle OpenAI v1.0+ API
     if OPENAI_V1:
@@ -61,7 +75,7 @@ def openai_completion_query(model, messages, **kwargs):
             response = client.chat.completions.create(model=model, messages=messages, **kwargs)
             return response.choices[0].message.content
         except Exception as e:
-            return f"Error: {str(e)}"
+            raise OpenAICompletionError(f"Error with OpenAI API call: {str(e)}")
     
     # Handle older OpenAI API versions
     try:
@@ -72,21 +86,21 @@ def openai_completion_query(model, messages, **kwargs):
                 if hasattr(response.choices[0], "message"):
                     return response.choices[0].message["content"]
                 return response.choices[0]["message"]["content"]
-            except Exception:
-                return ""
+            except Exception as e:
+                raise OpenAICompletionError(f"Error extracting content from response: {str(e)}")
         
         # Fall back to Completion API for very old versions
         prompt = _format_messages_as_prompt(messages)
         response = client.Completion.create(engine=model, prompt=prompt, **kwargs)
         return response.choices[0].text.strip()
-    except Exception:
+    except Exception as e:
         # Last resort: try through api_resources if available
         return _try_api_resources_fallback(model, messages, **kwargs)
 
 
 def openai_debug_completion_query(model, messages, **kwargs):
     """
-    Makes a completion query to the OpenAI API without catching most exceptions.
+    Makes a completion query to the OpenAI API with minimal error handling.
     Better for debugging issues.
     
     Args:
@@ -96,10 +110,14 @@ def openai_debug_completion_query(model, messages, **kwargs):
         
     Returns:
         str: The model's response text
+        
+    Raises:
+        OpenAIInitializationError: If the client is not initialized
+        OpenAICompletionError: If the completion request fails
     """
     # Check if OpenAI client failed to initialize
     if client is None:
-        return "Error: OpenAI client failed to initialize. Please check your API key."
+        raise OpenAIInitializationError("OpenAI client failed to initialize. Please check your API key.")
     
     # Handle OpenAI v1.0+ API
     if OPENAI_V1:
@@ -107,7 +125,7 @@ def openai_debug_completion_query(model, messages, **kwargs):
             response = client.chat.completions.create(model=model, messages=messages, **kwargs)
             return response.choices[0].message.content
         except Exception as e:
-            return f"Error: {str(e)}"
+            raise OpenAICompletionError(f"Error with OpenAI API call: {str(e)}")
     
     # Handle older OpenAI API versions
     try:
@@ -122,7 +140,7 @@ def openai_debug_completion_query(model, messages, **kwargs):
         prompt = _format_messages_as_prompt(messages)
         response = client.Completion.create(engine=model, prompt=prompt, **kwargs)
         return response.choices[0].text.strip()
-    except Exception:
+    except Exception as e:
         # Last resort: try through api_resources if available
         return _try_api_resources_fallback(model, messages, **kwargs)
 
@@ -138,7 +156,10 @@ def _try_api_resources_fallback(model, messages, **kwargs):
         **kwargs: Additional arguments
         
     Returns:
-        str: Response or error message
+        str: Response if successful
+        
+    Raises:
+        OpenAICompletionError: If fallback fails
     """
     # Check if api_resources exists
     api_resources_exists = False
@@ -160,10 +181,13 @@ def _try_api_resources_fallback(model, messages, **kwargs):
                 **kwargs
             )
             return response.choices[0].message["content"]
-        except Exception:
-            pass
+        except Exception as e:
+            raise OpenAICompletionError(f"Error with api_resources fallback: {str(e)}")
             
-    return f"Error: Could not complete request. This version of OpenAI SDK ({openai.__version__}) doesn't support the required API methods."
+    raise OpenAICompletionError(
+        f"Could not complete request. This version of OpenAI SDK ({openai.__version__}) "
+        f"doesn't support the required API methods."
+    )
 
 
 def _format_messages_as_prompt(messages):
@@ -252,7 +276,10 @@ def create_direct_client(api_key=None):
         api_key (str, optional): Your OpenAI API key. If not provided, will try to get from environment.
     
     Returns:
-        A working OpenAI client or None if initialization fails.
+        A working OpenAI client
+        
+    Raises:
+        OpenAIInitializationError: If client creation fails
     """
     try:
         # Try to determine if we can use OpenAI v1 API
@@ -267,7 +294,7 @@ def create_direct_client(api_key=None):
             api_key = os.environ.get("OPENAI_API_KEY")
             
         if not api_key:
-            return None
+            raise OpenAIInitializationError("API key is required. Provide as parameter or set OPENAI_API_KEY environment variable.")
             
         # Create client based on available API
         if v1_api_available:
@@ -275,7 +302,7 @@ def create_direct_client(api_key=None):
                 # Try the most direct way possible
                 client = OpenAI(api_key=api_key)
                 return client
-            except Exception:
+            except Exception as e:
                 # Try bare-bones approach using manual initialization
                 try:
                     # Create object directly to bypass __init__
@@ -290,11 +317,11 @@ def create_direct_client(api_key=None):
                     setattr(client, "_client", http_client)
                     setattr(client, "api_key", api_key)
                     return client
-                except Exception:
-                    return None
+                except Exception as e2:
+                    raise OpenAIInitializationError(f"Failed to create OpenAI client: {str(e2)}")
         else:
             # For older versions
             openai.api_key = api_key
             return openai
-    except Exception:
-        return None
+    except Exception as e:
+        raise OpenAIInitializationError(f"Failed to create OpenAI client: {str(e)}")
