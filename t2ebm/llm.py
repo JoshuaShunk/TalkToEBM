@@ -153,6 +153,34 @@ class LocalLLMChatModel(AbstractChatModel):
         except Exception as e:
             raise LocalLLMError(f"Failed to complete request: {str(e)}")
     
+    def _filter_deepseek_thinking(self, response_text: str) -> str:
+        """
+        Filter out thinking sections from DeepSeek model responses.
+        
+        DeepSeek models sometimes include <think>...</think> sections in their responses
+        that should be filtered out before returning to the user.
+        
+        Args:
+            response_text: The raw response from the DeepSeek model
+            
+        Returns:
+            str: The filtered response with thinking sections removed
+        """
+        if not response_text:
+            return response_text
+            
+        # Remove sections enclosed in <think>...</think> tags
+        import re
+        filtered_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL)
+        
+        # Also handle variations like `think>...` without brackets
+        filtered_text = re.sub(r'think>.*?</think>', '', filtered_text, flags=re.DOTALL)
+        
+        # Clean up any leftover empty lines from the removal
+        filtered_text = re.sub(r'\n\s*\n', '\n\n', filtered_text)
+        
+        return filtered_text.strip()
+    
     def _ollama_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
         """
         Send a completion request to an Ollama API.
@@ -190,21 +218,32 @@ class LocalLLMChatModel(AbstractChatModel):
         
         # Try different response formats - different models might return different structures
         try:
+            content = None
+            
             # Most common format
             if "message" in response_data and "content" in response_data["message"]:
-                return response_data["message"]["content"]
+                content = response_data["message"]["content"]
             # Alternative format sometimes used
             elif "response" in response_data:
-                return response_data["response"]
+                content = response_data["response"]
             # Some models might return this format
             elif "choices" in response_data and len(response_data["choices"]) > 0:
                 if "message" in response_data["choices"][0]:
-                    return response_data["choices"][0]["message"]["content"]
+                    content = response_data["choices"][0]["message"]["content"]
                 elif "text" in response_data["choices"][0]:
-                    return response_data["choices"][0]["text"]
+                    content = response_data["choices"][0]["text"]
             # DeepSeek specific format (if needed)
             elif "deepseek" in self.model.lower() and "output" in response_data:
-                return response_data["output"]
+                content = response_data["output"]
+                
+            # If we got content and this is a DeepSeek model, filter out thinking sections
+            if content and 'deepseek' in self.model.lower():
+                return self._filter_deepseek_thinking(content)
+                
+            # Return the content if we found it
+            if content:
+                return content
+                
         except (KeyError, TypeError, IndexError):
             pass
         
