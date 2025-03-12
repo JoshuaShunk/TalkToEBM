@@ -287,8 +287,8 @@ import t2ebm
 
 # Define a local LLM configuration
 local_llm = {
-    "provider": "ollama",               # Use "ollama" or "local"
-    "model": "llama2",                  # Name of the model you've pulled into Ollama
+    "provider": "local",                 # Use "local"
+    "model": "llama2",                   # Name of the model you've pulled into Ollama
     "base_url": "http://localhost:11434" # URL where Ollama is running
 }
 
