@@ -14,17 +14,7 @@ def graph_system_msg(expert_description="an expert statistician and data scienti
     Returns:
         str: The system message.
     """
-    return f"""You are {expert_description}. You interpret global explanations produced by a Generalized Additive Model (GAM). 
-
-IMPORTANT: When analyzing graphs, you must ONLY describe patterns that are explicitly present in the provided data. Never fabricate or invent data points, trends, time periods, categories, or relationships that are not clearly represented in the graph. 
-
-If the graph shows numeric ranges rather than specific categories, do not assume these represent time periods, years, or any other specific units unless explicitly stated in the description.
-
-Always ground your analysis in the exact data provided, and be transparent about uncertainty. If you're unsure about what a specific range or value represents, acknowledge this uncertainty rather than making assumptions.
-
-You MUST ALWAYS explicitly mention the feature name in your description and relate the patterns to this specific feature. For example, if describing an 'Age' feature, begin your description with "The Age feature shows..." or similar phrasing that clearly identifies the feature being described.
-
-You answer all questions to the best of your ability, relying ONLY on the graphs provided by the user, any other information you are given, and your knowledge about the real world."""
+    return f"You are {expert_description}. You interpret global explanations produced by a Generalized Additive Model (GAM). You answer all questions to the best of your ability, relying on the graphs provided by the user, any other information you are given, and your knowledge about the real world."
 
 
 def describe_graph(
@@ -51,19 +41,7 @@ The graph is provided in the following format:
     - The type of the feature (continuous, categorical, or boolean)
     - Mean values
     - Lower bounds of confidence interval (optional)
-    - Upper bounds of confidence interval (optional)
-
-CRITICAL INSTRUCTIONS:
-1. ALWAYS begin your description by explicitly mentioning the feature name
-2. Consistently refer to the feature by name throughout your description
-3. Only describe patterns that are explicitly shown in the provided data
-4. Do NOT fabricate or invent any data points, trends, or relationships
-5. For continuous features, do not assume that numeric ranges represent specific time periods, years, or dates unless explicitly stated
-6. When uncertain about what a value represents, acknowledge this uncertainty rather than making assumptions
-7. Ground all observations in the exact values provided in the graph data
-8. If you need context that is not provided, state this clearly rather than making up information
-
-"""
+    - Upper bounds of confidence interval (optional)\n\n"""
 
     # the graph
     prompt += f"Here is the graph:\n\n{graph}\n\n"
@@ -90,39 +68,17 @@ def describe_graph_cot(graph, num_sentences=7, **kwargs):
     return [
         {"role": "system", "content": graph_system_msg()},
         {"role": "user", "content": describe_graph(graph, **kwargs)},
-        {"role": "assistant", "temperature": 0.3, "max_tokens": 3000},
+        {"role": "assistant", "temperature": 0.7, "max_tokens": 3000},
         {
             "role": "user",
-            "content": """First, please itemize and list ONLY the specific data points and ranges that you can directly observe in the graph. 
-Include:
-1. The name and type of the feature
-2. The exact ranges or categories shown on the x-axis
-3. The corresponding values on the y-axis
-4. The confidence intervals if provided
-
-DO NOT interpret the data yet, just summarize the actual values you observe."""
+            "content": "Great, now please study the graph carefully and highlight any regions you may find surprising or counterintuitive. You may also suggest an explanation for why this behavior is surprising, and what may have caused it.",
         },
-        {"role": "assistant", "temperature": 0.3, "max_tokens": 2000},
+        {"role": "assistant", "temperature": 0.7, "max_tokens": 2000},
         {
             "role": "user",
-            "content": "Great, now please study the graph carefully and highlight any regions you may find surprising or counterintuitive. You may also suggest an explanation for why this behavior is surprising, and what may have caused it. Remember to refer only to the exact data you observed in your previous response, and do not invent or assume data not present in the graph.",
+            "content": f"Thanks. Now please provide a brief, at most {num_sentences} sentence description of the graph. Be sure to include any important surprising patterns in the description. You can assume that the user knows that the graph is from a Generalized Additive Model (GAM).",
         },
-        {"role": "assistant", "temperature": 0.3, "max_tokens": 2000},
-        {
-            "role": "user",
-            "content": f"""Thanks. Now please provide a brief, at most {num_sentences} sentence description of the graph. Be sure to include any important surprising patterns in the description. 
-
-IMPORTANT REQUIREMENTS:
-- BEGIN your description by explicitly mentioning the feature name (e.g., "The Age feature shows...")
-- CONTINUE to reference the feature by name throughout your description
-- Refer ONLY to the data points and patterns you explicitly listed in your first response
-- DO NOT fabricate or invent trends, time periods, or relationships not shown in the data
-- If the meaning of a range is unclear, acknowledge this rather than making assumptions
-- Use direct references to specific values when making claims about the data
-
-You can assume that the user knows that the graph is from a Generalized Additive Model (GAM).""",
-        },
-        {"role": "assistant", "temperature": 0.3, "max_tokens": 2000},
+        {"role": "assistant", "temperature": 0.7, "max_tokens": 2000},
     ]
 
 
@@ -141,27 +97,12 @@ def summarize_ebm(
     messages = [
         {
             "role": "system",
-            "content": f"""You are {expert_description}. Your task is to provide an overall summary of a Generalized Additive Model (GAM). The model consists of different graphs that contain the effect of a specific input feature.
-
-IMPORTANT: When writing your summary, you must ONLY describe patterns and relationships that are explicitly present in the provided data. Never fabricate or invent data points, trends, time periods, categories, or relationships that are not clearly represented in the information provided.
-
-Always ground your analysis in the exact data provided, and be transparent about uncertainty. If you're unsure about what a specific range or value represents, acknowledge this uncertainty rather than making assumptions.
-
-When discussing each feature, ALWAYS explicitly mention the feature by name (e.g., "The Age feature shows..." or "Blood Pressure is associated with...") rather than using generic descriptions.""",
+            "content": f"You are {expert_description}. Your task is to provide an overall summary of a Generalized Additive Model (GAM). The model consists of different graphs that contain the effect of a specific input feature. ",
         }
     ]
     user_msg = """Your task is to summarize a Generalized Additive Model (GAM). To perform this task, you will be given
     - The global feature importances of the different features in the model.
-    - Summaries of the graphs for the different features in the model. There is exactly one graph for each feature in the model. 
-
-INSTRUCTIONS:
-1. ALWAYS refer to each feature by its specific name when describing its effects
-2. Only reference information explicitly present in the provided data
-3. Do NOT fabricate or invent any data points, trends, or relationships
-4. For continuous features, do not assume numeric ranges represent specific time periods, years, or dates
-5. When uncertain about what a value represents, acknowledge this uncertainty rather than making assumptions
-6. Ground all observations in the exact values provided in the feature data
-"""
+    - Summaries of the graphs for the different features in the model. There is exactly one graph for each feature in the model. """
     user_msg += f"Here are the global feature importances.\n\n{feature_importances}\n\n"
     user_msg += f"Here are the descriptions of the different graphs.\n\n{graph_descriptions}\n\n"
     if dataset_description is not None and len(dataset_description) > 0:
@@ -170,17 +111,15 @@ INSTRUCTIONS:
     
 The summary should contain the most important features in the model and their effect on the outcome. Unimportant effects and features can be ignored. 
     
-Pay special attention to include any surprising patterns in the summary. Make sure to identify each feature by its specific name when describing its effects."""
+Pay special attention to include any surprising patterns in the summary."""
     messages.append({"role": "user", "content": user_msg})
-    messages.append({"role": "assistant", "temperature": 0.3, "max_tokens": 3000})
+    messages.append({"role": "assistant", "temperature": 0.7, "max_tokens": 3000})
     if num_sentences is not None:
         messages.append(
             {
                 "role": "user",
-                "content": f"""Great. Now shorten the above summary to at most {num_sentences} sentences. Be sure to keep the most important information.
-
-REMINDER: Continue to refer to each feature by its specific name. Only reference patterns and relationships explicitly present in the data. Do not fabricate or invent information not provided in the feature data.""",
+                "content": f"Great. Now shorten the above summary to at most {num_sentences} sentences. Be sure to keep the most important information.",
             }
         )
-        messages.append({"role": "assistant", "temperature": 0.3, "max_tokens": 2000})
+        messages.append({"role": "assistant", "temperature": 0.7, "max_tokens": 2000})
     return messages
