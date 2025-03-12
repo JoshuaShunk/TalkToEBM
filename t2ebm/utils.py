@@ -9,27 +9,28 @@ import openai
 import os
 import tiktoken
 
-# Try to import from llm module first to keep client initialization consistent
+# Import necessary modules and classes from llm.py
 try:
     from .llm import (create_openai_client, OPENAI_V1, OPENAI_INIT_FAILED, 
-                     OpenAIInitializationError, OpenAICompletionError)
-    client = create_openai_client()
+                     OpenAIInitializationError, OpenAICompletionError,
+                     LocalLLMError)
+    # Don't initialize the client at import time - defer until needed
+    client = None
+    client_initialized = False
 except ImportError:
     # Fallback to direct initialization
     try:
         # For OpenAI v1.0+
         from openai import OpenAI
-        # Initialize client with only supported parameters
-        try:
-            client = OpenAI()
-        except TypeError:
-            # Try with just the API key
-            api_key = os.environ.get("OPENAI_API_KEY")
-            client = OpenAI(api_key=api_key) if api_key else None
+        # Don't initialize client at import time
+        client = None
+        client_initialized = False
         OPENAI_V1 = True
     except ImportError:
         # For OpenAI <v1.0
-        client = openai
+        client = None  # Don't initialize
+        client_initialized = False
+        import openai
         OPENAI_V1 = False
     
     # Define exception classes if importing from llm failed
@@ -40,6 +41,66 @@ except ImportError:
     class OpenAICompletionError(Exception):
         """Exception raised when OpenAI completion fails."""
         pass
+    
+    class LocalLLMError(Exception):
+        """Exception raised when a local LLM request fails."""
+        pass
+
+
+def _ensure_client():
+    """
+    Lazily initialize the OpenAI client only when needed.
+    This function is called before any API operations.
+    
+    Returns:
+        The initialized client
+        
+    Raises:
+        OpenAIInitializationError: If initialization fails
+    """
+    global client, client_initialized
+    
+    # If already initialized, just return the client
+    if client_initialized:
+        return client
+    
+    # Try to initialize the client
+    try:
+        from .llm import create_openai_client
+        client = create_openai_client()
+        client_initialized = True
+        return client
+    except (ImportError, OpenAIInitializationError):
+        # Fallback to direct initialization
+        try:
+            # For OpenAI v1.0+
+            from openai import OpenAI
+            
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if api_key:
+                client = OpenAI(api_key=api_key)
+                client_initialized = True
+                return client
+            
+            # Try without API key (in case it's in config file)
+            try:
+                client = OpenAI()
+                client_initialized = True
+                return client
+            except:
+                pass
+                
+        except ImportError:
+            # For OpenAI <v1.0
+            if "OPENAI_API_KEY" in os.environ:
+                openai.api_key = os.environ["OPENAI_API_KEY"]
+                client = openai
+                client_initialized = True
+                return client
+                
+    # If we got here, we couldn't initialize the client
+    client_initialized = True  # Mark as initialized to avoid repeated attempts
+    return None
 
 
 def num_tokens_from_string_(string: str, model_name: str) -> int:
@@ -65,6 +126,11 @@ def openai_completion_query(model, messages, **kwargs):
         OpenAIInitializationError: If the client is not initialized
         OpenAICompletionError: If the completion request fails
     """
+    # Lazily initialize the client
+    global client
+    if not client_initialized:
+        client = _ensure_client()
+    
     # Check if OpenAI client failed to initialize
     if client is None:
         raise OpenAIInitializationError("OpenAI client failed to initialize. Please check your API key.")
@@ -115,6 +181,11 @@ def openai_debug_completion_query(model, messages, **kwargs):
         OpenAIInitializationError: If the client is not initialized
         OpenAICompletionError: If the completion request fails
     """
+    # Lazily initialize the client
+    global client
+    if not client_initialized:
+        client = _ensure_client()
+    
     # Check if OpenAI client failed to initialize
     if client is None:
         raise OpenAIInitializationError("OpenAI client failed to initialize. Please check your API key.")
