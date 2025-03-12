@@ -22,6 +22,8 @@ If the graph shows numeric ranges rather than specific categories, do not assume
 
 Always ground your analysis in the exact data provided, and be transparent about uncertainty. If you're unsure about what a specific range or value represents, acknowledge this uncertainty rather than making assumptions.
 
+You MUST ALWAYS explicitly mention the feature name in your description and relate the patterns to this specific feature. For example, if describing an 'Age' feature, begin your description with "The Age feature shows..." or similar phrasing that clearly identifies the feature being described.
+
 You answer all questions to the best of your ability, relying ONLY on the graphs provided by the user, any other information you are given, and your knowledge about the real world."""
 
 
@@ -52,12 +54,14 @@ The graph is provided in the following format:
     - Upper bounds of confidence interval (optional)
 
 CRITICAL INSTRUCTIONS:
-1. Only describe patterns that are explicitly shown in the provided data
-2. Do NOT fabricate or invent any data points, trends, or relationships
-3. For continuous features, do not assume that numeric ranges represent specific time periods, years, or dates unless explicitly stated
-4. When uncertain about what a value represents, acknowledge this uncertainty rather than making assumptions
-5. Ground all observations in the exact values provided in the graph data
-6. If you need context that is not provided, state this clearly rather than making up information
+1. ALWAYS begin your description by explicitly mentioning the feature name
+2. Consistently refer to the feature by name throughout your description
+3. Only describe patterns that are explicitly shown in the provided data
+4. Do NOT fabricate or invent any data points, trends, or relationships
+5. For continuous features, do not assume that numeric ranges represent specific time periods, years, or dates unless explicitly stated
+6. When uncertain about what a value represents, acknowledge this uncertainty rather than making assumptions
+7. Ground all observations in the exact values provided in the graph data
+8. If you need context that is not provided, state this clearly rather than making up information
 
 """
 
@@ -108,7 +112,9 @@ DO NOT interpret the data yet, just summarize the actual values you observe."""
             "role": "user",
             "content": f"""Thanks. Now please provide a brief, at most {num_sentences} sentence description of the graph. Be sure to include any important surprising patterns in the description. 
 
-IMPORTANT REMINDER: 
+IMPORTANT REQUIREMENTS:
+- BEGIN your description by explicitly mentioning the feature name (e.g., "The Age feature shows...")
+- CONTINUE to reference the feature by name throughout your description
 - Refer ONLY to the data points and patterns you explicitly listed in your first response
 - DO NOT fabricate or invent trends, time periods, or relationships not shown in the data
 - If the meaning of a range is unclear, acknowledge this rather than making assumptions
@@ -139,7 +145,9 @@ def summarize_ebm(
 
 IMPORTANT: When writing your summary, you must ONLY describe patterns and relationships that are explicitly present in the provided data. Never fabricate or invent data points, trends, time periods, categories, or relationships that are not clearly represented in the information provided.
 
-Always ground your analysis in the exact data provided, and be transparent about uncertainty. If you're unsure about what a specific range or value represents, acknowledge this uncertainty rather than making assumptions.""",
+Always ground your analysis in the exact data provided, and be transparent about uncertainty. If you're unsure about what a specific range or value represents, acknowledge this uncertainty rather than making assumptions.
+
+When discussing each feature, ALWAYS explicitly mention the feature by name (e.g., "The Age feature shows..." or "Blood Pressure is associated with...") rather than using generic descriptions.""",
         }
     ]
     user_msg = """Your task is to summarize a Generalized Additive Model (GAM). To perform this task, you will be given
@@ -147,11 +155,12 @@ Always ground your analysis in the exact data provided, and be transparent about
     - Summaries of the graphs for the different features in the model. There is exactly one graph for each feature in the model. 
 
 INSTRUCTIONS:
-1. Only reference information explicitly present in the provided data
-2. Do NOT fabricate or invent any data points, trends, or relationships
-3. For continuous features, do not assume numeric ranges represent specific time periods, years, or dates
-4. When uncertain about what a value represents, acknowledge this uncertainty rather than making assumptions
-5. Ground all observations in the exact values provided in the feature data
+1. ALWAYS refer to each feature by its specific name when describing its effects
+2. Only reference information explicitly present in the provided data
+3. Do NOT fabricate or invent any data points, trends, or relationships
+4. For continuous features, do not assume numeric ranges represent specific time periods, years, or dates
+5. When uncertain about what a value represents, acknowledge this uncertainty rather than making assumptions
+6. Ground all observations in the exact values provided in the feature data
 """
     user_msg += f"Here are the global feature importances.\n\n{feature_importances}\n\n"
     user_msg += f"Here are the descriptions of the different graphs.\n\n{graph_descriptions}\n\n"
@@ -161,7 +170,7 @@ INSTRUCTIONS:
     
 The summary should contain the most important features in the model and their effect on the outcome. Unimportant effects and features can be ignored. 
     
-Pay special attention to include any surprising patterns in the summary."""
+Pay special attention to include any surprising patterns in the summary. Make sure to identify each feature by its specific name when describing its effects."""
     messages.append({"role": "user", "content": user_msg})
     messages.append({"role": "assistant", "temperature": 0.3, "max_tokens": 3000})
     if num_sentences is not None:
@@ -170,7 +179,7 @@ Pay special attention to include any surprising patterns in the summary."""
                 "role": "user",
                 "content": f"""Great. Now shorten the above summary to at most {num_sentences} sentences. Be sure to keep the most important information.
 
-REMINDER: Continue to only reference patterns and relationships explicitly present in the data. Do not fabricate or invent information not provided in the feature data.""",
+REMINDER: Continue to refer to each feature by its specific name. Only reference patterns and relationships explicitly present in the data. Do not fabricate or invent information not provided in the feature data.""",
             }
         )
         messages.append({"role": "assistant", "temperature": 0.3, "max_tokens": 2000})
