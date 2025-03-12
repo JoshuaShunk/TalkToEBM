@@ -175,20 +175,41 @@ class LocalLLMChatModel(AbstractChatModel):
             "stream": False
         }
         
+        # Some models might require additional parameters or format adjustments
+        if any(model_type in self.model.lower() for model_type in ['deepseek', 'mistral', 'mixtral', 'llama', 'yi', 'phi', 'gemma']):
+            # Add any model-specific parameters if needed
+            # Currently Ollama handles most models with the same API format
+            pass
+        
         response = requests.post(url, json=payload, timeout=120)
         
         if response.status_code != 200:
             raise LocalLLMError(f"Ollama API returned error status: {response.status_code} - {response.text}")
         
         response_data = response.json()
+        
+        # Try different response formats - different models might return different structures
         try:
-            # Extract the message content from the response
-            return response_data["message"]["content"]
-        except (KeyError, TypeError):
-            # Try a different format if the expected format is not found
-            if "response" in response_data:
+            # Most common format
+            if "message" in response_data and "content" in response_data["message"]:
+                return response_data["message"]["content"]
+            # Alternative format sometimes used
+            elif "response" in response_data:
                 return response_data["response"]
-            raise LocalLLMError(f"Unexpected response format from Ollama API: {response_data}")
+            # Some models might return this format
+            elif "choices" in response_data and len(response_data["choices"]) > 0:
+                if "message" in response_data["choices"][0]:
+                    return response_data["choices"][0]["message"]["content"]
+                elif "text" in response_data["choices"][0]:
+                    return response_data["choices"][0]["text"]
+            # DeepSeek specific format (if needed)
+            elif "deepseek" in self.model.lower() and "output" in response_data:
+                return response_data["output"]
+        except (KeyError, TypeError, IndexError):
+            pass
+        
+        # If we couldn't parse the response using the expected formats, raise an error with the raw response
+        raise LocalLLMError(f"Unexpected response format from Ollama API: {response_data}")
     
     def _generic_completion(self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int) -> str:
         """
@@ -546,8 +567,8 @@ def setup(model: Union[AbstractChatModel, str, Dict[str, Any]]) -> AbstractChatM
             azure = model.get("azure", False)
             return openai_setup(model_name, azure)
             
-        elif provider in ["local", "ollama"]:
-            # Set up local LLM
+        elif provider in ["local", "ollama", "deepseek", "llama", "mistral", "mixtral", "gemma", "yi", "phi"]:
+            # Set up local LLM - support various model types running through Ollama or other local API servers
             model_name = model.get("model", "llama2")
             base_url = model.get("base_url")
             if not base_url:
@@ -555,7 +576,17 @@ def setup(model: Union[AbstractChatModel, str, Dict[str, Any]]) -> AbstractChatM
             return local_llm_setup(model_name, base_url)
             
         else:
-            raise ValueError(f"Unsupported provider: {provider}. Supported: 'openai', 'local', 'ollama'")
+            # Assume any other provider is a model running on a local server
+            # This is much more flexible and allows users to specify any model type
+            model_name = model.get("model")
+            base_url = model.get("base_url")
+            
+            if not model_name:
+                raise ValueError(f"Model name is required for provider: {provider}")
+            if not base_url:
+                raise ValueError(f"base_url is required for provider: {provider}")
+                
+            return local_llm_setup(model_name, base_url)
     
     # If we got here, the input format is invalid
     raise ValueError(
