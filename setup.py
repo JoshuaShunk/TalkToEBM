@@ -34,7 +34,6 @@ setuptools.setup(
         "matplotlib",
         "tiktoken",
         "openai>=1.8.0",
-        "tenacity",
         "scipy",
         "interpret",
         "requests>=2.25.0",

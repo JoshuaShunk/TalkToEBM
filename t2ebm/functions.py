@@ -91,7 +91,6 @@ def describe_graph(
     )
 
     # execute the prompt
-    print(messages)
     messages = t2ebm.llm.chat_completion(llm, messages)
 
     # the last message contains the summary

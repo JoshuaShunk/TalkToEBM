@@ -2,9 +2,6 @@
 Misc. helper functions
 """
 
-# Only import the tenacity modules we actually use
-from tenacity import wait_random_exponential
-
 import openai
 import os
 import tiktoken

@@ -56,7 +56,6 @@ The graph is provided in the following format:
 
     # the task that the LLM is intended to perform
     prompt += task_description
-    print(prompt)
     return prompt
 
 
