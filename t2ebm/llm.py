@@ -666,17 +666,6 @@ def chat_completion(llm: Union[str, AbstractChatModel, Dict[str, Any]], messages
                 temperature = messages[msg_idx].get("temperature", 0.7)
                 max_tokens = messages[msg_idx].get("max_tokens", 1000)
                 
-                # Print debug information for the messages being sent to the LLM
-                print("\n========== DEBUG: MESSAGES SENT TO LLM ==========")
-                for i, msg in enumerate(messages[:msg_idx]):
-                    print(f"Message {i+1} - Role: {msg['role']}")
-                    content_preview = msg.get('content', '').replace('\n', ' ')[:150]
-                    if len(msg.get('content', '')) > 150:
-                        content_preview += "..."
-                    print(f"Content: {content_preview}")
-                print(f"Temperature: {temperature}, Max Tokens: {max_tokens}")
-                print("=================================================\n")
-                
                 # Generate content
                 messages[msg_idx]["content"] = llm.chat_completion(
                     messages[:msg_idx],

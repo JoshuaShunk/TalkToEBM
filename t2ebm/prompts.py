@@ -41,19 +41,7 @@ The graph is provided in the following format:
     - The type of the feature (continuous, categorical, or boolean)
     - Mean values
     - Lower bounds of confidence interval (optional)
-    - Upper bounds of confidence interval (optional)
-
-CRITICAL INSTRUCTIONS:
-1. ALWAYS begin your description by explicitly mentioning the feature name
-2. Consistently refer to the feature by name throughout your description
-3. Only describe patterns that are explicitly shown in the provided data
-4. Do NOT fabricate or invent any data points, trends, or relationships
-5. For continuous features, do not assume that numeric ranges represent specific time periods, years, or dates unless explicitly stated
-6. When uncertain about what a value represents, acknowledge this uncertainty rather than making assumptions
-7. Ground all observations in the exact values provided in the graph data
-8. If you need context that is not provided, state this clearly rather than making up information
-
-"""
+    - Upper bounds of confidence interval (optional)\n\n"""
 
     # the graph
     prompt += f"Here is the graph:\n\n{graph}\n\n"
@@ -68,12 +56,7 @@ CRITICAL INSTRUCTIONS:
 
     # the task that the LLM is intended to perform
     prompt += task_description
-    
-    # Print debug information
-    print("\n========== DEBUG: LLM INPUT PROMPT ==========")
     print(prompt)
-    print("============================================\n")
-    
     return prompt
 
 
