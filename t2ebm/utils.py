@@ -229,33 +229,34 @@ def _try_api_resources_fallback(model, messages, **kwargs):
     Raises:
         OpenAICompletionError: If fallback fails
     """
-    # Check if api_resources exists
-    api_resources_exists = False
-    try:
-        import importlib
-        api_resources = importlib.import_module("openai.api_resources")
-        api_resources_exists = hasattr(api_resources, "ChatCompletion")
-    except (ImportError, AttributeError):
-        api_resources_exists = False
-    
-    if api_resources_exists:
-        # Only import if it exists
+    # For OpenAI SDK v1+, try the direct method
+    if OPENAI_V1:
         try:
-            from openai.api_resources import ChatCompletion
-            response = ChatCompletion.create(
-                api_key=openai.api_key,
+            from openai import OpenAI
+            client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+            response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 **kwargs
             )
-            return response.choices[0].message["content"]
+            return response.choices[0].message.content
         except Exception as e:
-            raise OpenAICompletionError(f"Error with api_resources fallback: {str(e)}")
+            pass
             
-    raise OpenAICompletionError(
-        f"Could not complete request. This version of OpenAI SDK ({openai.__version__}) "
-        f"doesn't support the required API methods."
-    )
+    # For older SDK versions
+    try:
+        # Skip the api_resources import which might not exist
+        # Use the top-level API directly
+        response = openai.ChatCompletion.create(
+            model=model,
+            messages=messages,
+            **kwargs
+        )
+        if hasattr(response.choices[0], "message"):
+            return response.choices[0].message["content"] or ""
+        return response.choices[0]["message"]["content"] or ""
+    except Exception as e:
+        raise OpenAICompletionError(f"Could not complete request with any OpenAI SDK method: {str(e)}")
 
 
 def _format_messages_as_prompt(messages):

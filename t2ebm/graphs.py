@@ -199,6 +199,7 @@ def graph_to_text(
     confidence_bounds=True,
     confidence_level=0.95,
     max_tokens=3000,
+    raw=False,
 ):
     """Convert an EBMGraph to text. This is the text that we then pass to the LLM.
 
@@ -213,6 +214,7 @@ def graph_to_text(
         confidence_bounds (bool, optional): Whether to inlcude confidence bounds. Defaults to True.
         confidence_level (float, optional): The desired confidence level of the bounds. Defaults to 0.95.
         max_tokens (int, optional): The maximum number of tokens that the textual description of the graph can have. The function simplifies the graph so to fit into this token limit. Defaults to 3000.
+        raw (bool, optional): If True, use the graph data without any simplification. Defaults to False.
 
     Raises:
         Exception: If an error occurs.
@@ -259,13 +261,17 @@ def graph_to_text(
     # simplify the graph until it fits into the max_tokens limit
     total_tokens = None
     min_variation_per_cent = 0.0
+    
     while True:
-        # simplify the graph
+        # simplify the graph if raw=False, otherwise use the original graph
         simplified_graph = graph
-        if feature_format == "continuous":
+        if feature_format == "continuous" and not raw:
             simplified_graph = simplify_graph(
                 graph, min_variation_per_cent=min_variation_per_cent
             )
+        else:
+            # No simplification when raw=True or for non-continuous features
+            simplified_graph = graph
 
         # confidence bounds via normal approximation
         scores = simplified_graph.scores
@@ -333,6 +339,14 @@ def graph_to_text(
 
         # count the number of tokens
         total_tokens = num_tokens_from_string_(prompt, "gpt-4")
+        
+        # If raw=True, we don't want to simplify the graph regardless of token count
+        if raw:
+            if total_tokens > max_tokens:
+                print(f"WARNING: Raw graph output exceeds token limit ({total_tokens} > {max_tokens})")
+            return prompt
+            
+        # For non-raw mode, continue with the simplification logic
         if feature_format == "continuous":
             if total_tokens > max_tokens:
                 if min_variation_per_cent > 0.1:
