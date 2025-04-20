@@ -339,12 +339,6 @@ def graph_to_text(
 
         # count the number of tokens
         total_tokens = num_tokens_from_string_(prompt, "gpt-4")
-        
-        # If raw=True, we don't want to simplify the graph regardless of token count
-        if raw:
-            if total_tokens > max_tokens:
-                print(f"WARNING: Raw graph output exceeds token limit ({total_tokens} > {max_tokens})")
-            return prompt
             
         # For non-raw mode, continue with the simplification logic
         if feature_format == "continuous":
