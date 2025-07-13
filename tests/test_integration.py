@@ -2,8 +2,8 @@
 Integration tests for t2ebm package.
 """
 
-import pytest
 import numpy as np
+import pytest
 from interpret.glassbox import ExplainableBoostingClassifier
 
 import t2ebm
@@ -20,7 +20,7 @@ class TestIntegration:
         X = np.random.randn(50, 2)
         coef = np.array([1.0, -1.0])
         y = (np.dot(X, coef) > 0).astype(int)
-        
+
         ebm = ExplainableBoostingClassifier(random_state=42)
         ebm.fit(X, y)
         return ebm
@@ -28,12 +28,12 @@ class TestIntegration:
     def test_full_pipeline_with_dummy_llm(self, sample_ebm):
         """Test the full pipeline with dummy LLM."""
         llm = t2ebm.llm.DummyChatModel()
-        
+
         # Test high-level functions
         result = t2ebm.describe_graph(llm, sample_ebm, 0)
         assert isinstance(result, str)
         assert len(result) > 0
-        
+
         result = t2ebm.describe_ebm(llm, sample_ebm)
         assert isinstance(result, str)
         assert len(result) > 0
@@ -43,7 +43,7 @@ class TestIntegration:
         msg = prompts.graph_system_msg()
         assert isinstance(msg, str)
         assert "expert" in msg.lower()
-        
+
         msg = prompts.graph_system_msg("a data analyst")
         assert "data analyst" in msg
 
@@ -53,7 +53,7 @@ class TestIntegration:
             feature_importances="feature1: 0.8\nfeature2: 0.2",
             graph_descriptions="Feature 1 shows positive trend",
             dataset_description="Test dataset",
-            num_sentences=5
+            num_sentences=5,
         )
         assert isinstance(messages, list)
         assert len(messages) >= 2
@@ -63,7 +63,7 @@ class TestIntegration:
         """Test chain-of-thought prompting."""
         graph_text = "Feature Name: test\nFeature Type: continuous"
         messages = prompts.describe_graph_cot(graph_text, num_sentences=3)
-        
+
         assert isinstance(messages, list)
         assert len(messages) >= 3
         assert any(msg["role"] == "system" for msg in messages)
@@ -73,28 +73,28 @@ class TestIntegration:
     def test_module_imports(self):
         """Test that all expected modules and functions are importable."""
         # Test main package imports
-        assert hasattr(t2ebm, 'describe_graph')
-        assert hasattr(t2ebm, 'describe_ebm')
-        assert hasattr(t2ebm, 'feature_importances_to_text')
-        
+        assert hasattr(t2ebm, "describe_graph")
+        assert hasattr(t2ebm, "describe_ebm")
+        assert hasattr(t2ebm, "feature_importances_to_text")
+
         # Test submodule imports
-        assert hasattr(t2ebm, 'graphs')
-        assert hasattr(t2ebm, 'llm')
-        assert hasattr(t2ebm, 'prompts')
-        assert hasattr(t2ebm, 'utils')
-        
+        assert hasattr(t2ebm, "graphs")
+        assert hasattr(t2ebm, "llm")
+        assert hasattr(t2ebm, "prompts")
+        assert hasattr(t2ebm, "utils")
+
         # Test version
-        assert hasattr(t2ebm, '__version__')
+        assert hasattr(t2ebm, "__version__")
         assert isinstance(t2ebm.__version__, str)
 
     def test_error_handling(self, sample_ebm):
         """Test error handling in various scenarios."""
         llm = t2ebm.llm.DummyChatModel()
-        
+
         # Test invalid feature index
         with pytest.raises((IndexError, ValueError)):
             t2ebm.describe_graph(llm, sample_ebm, 999)
-        
+
         # Test invalid model type
         with pytest.raises((AttributeError, TypeError)):
             t2ebm.describe_graph(llm, "not_a_model", 0)

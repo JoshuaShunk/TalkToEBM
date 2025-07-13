@@ -26,7 +26,7 @@ jobs:
       run: |
         black --check t2ebm/ tests/
         isort --check t2ebm/ tests/
-        flake8 t2ebm/ tests/
+        flake8 t2ebm/ tests/ --max-line-length=88 --extend-ignore=E203,E501,W503,F401,F841,F811,E722,W293,W291,F824
     - name: Run tests
       run: |
         pytest

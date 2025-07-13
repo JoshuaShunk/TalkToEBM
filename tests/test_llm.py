@@ -2,7 +2,6 @@
 Test LLM functionality and chat models.
 """
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -2,8 +2,6 @@
 Test prompt functionality.
 """
 
-import pytest
-
 import t2ebm.prompts as prompts
 
 

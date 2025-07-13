@@ -5,7 +5,6 @@ We interface the LLM via the simple class AbstractChatModel. To use your own LLM
 """
 
 import copy
-import json
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union

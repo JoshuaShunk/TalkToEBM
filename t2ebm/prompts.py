@@ -76,17 +76,17 @@ def describe_ebm(
         str: The prompt to describe the EBM.
     """
     prompt = """Below is a summary of a Generalized Additive Model (GAM). Please provide a comprehensive description of this model.\n\n"""
-    
+
     prompt += f"Model Summary:\n{model_text}\n\n"
-    
+
     if dataset_description and len(dataset_description) > 0:
         prompt += f"Dataset Description:\n{dataset_description}\n\n"
-    
+
     if y_axis_description and len(y_axis_description) > 0:
         prompt += f"Output Description:\n{y_axis_description}\n\n"
-    
+
     prompt += "Please describe the model, highlighting the most important features and their effects."
-    
+
     return prompt
 
 
