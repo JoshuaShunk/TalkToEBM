@@ -2,17 +2,13 @@
 TalkToEBM: A Natural Language Interface to Explainable Boosting Machines
 """
 
-from .version import __version__
-
 # Import modules that need to be accessible
-from . import llm
-from . import utils
-from . import graphs
-from . import prompts
+from . import graphs, llm, prompts, utils
 
 # high-level functions
 from .functions import (
-    feature_importances_to_text,
-    describe_graph,
     describe_ebm,
+    describe_graph,
+    feature_importances_to_text,
 )
+from .version import __version__

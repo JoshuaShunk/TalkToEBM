@@ -2,10 +2,10 @@
 Automates unit testing.
 """
 
-import t2ebm
-
-from interpret.glassbox import ExplainableBoostingClassifier
 import numpy as np
+from interpret.glassbox import ExplainableBoostingClassifier
+
+import t2ebm
 
 
 def test_package():

@@ -1,18 +1,16 @@
-from dataclasses import dataclass
+import json
 import typing
+from dataclasses import dataclass
 from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
-import json
-
-from interpret.glassbox._ebm._utils import convert_to_intervals
-
 from interpret.glassbox import (
     ExplainableBoostingClassifier,
     ExplainableBoostingRegressor,
 )
+from interpret.glassbox._ebm._utils import convert_to_intervals
 
 from t2ebm.utils import num_tokens_from_string_
 
@@ -24,8 +22,8 @@ from t2ebm.utils import num_tokens_from_string_
 
 @dataclass
 class EBMGraph:
-    """A datastructure for the graphs of Explainable Boosting Machines.
-    """
+    """A datastructure for the graphs of Explainable Boosting Machines."""
+
     feature_name: str
     feature_type: str
     x_vals: typing.List[
@@ -36,8 +34,8 @@ class EBMGraph:
 
 
 def extract_graph(
-    ebm : Union[ExplainableBoostingClassifier, ExplainableBoostingRegressor],
-    feature_index :int,
+    ebm: Union[ExplainableBoostingClassifier, ExplainableBoostingRegressor],
+    feature_index: int,
     normalization="none",
     use_feature_bounds=True,
 ):
@@ -108,7 +106,7 @@ def simplify_graph(graph: EBMGraph, min_variation_per_cent: float = 0.0):
 
     Returns:
         EBMGraph: The simplified graph.
-    """    
+    """
     assert graph.feature_type == "continuous", "Can only simplify continuous graphs."
     x_vals, scores, stds = graph.x_vals, graph.scores, graph.stds
     total_variation = np.max(scores) - np.min(scores)
@@ -199,13 +197,12 @@ def graph_to_text(
     confidence_bounds=True,
     confidence_level=0.95,
     max_tokens=3000,
-    raw=False,
 ):
     """Convert an EBMGraph to text. This is the text that we then pass to the LLM.
 
     The function takes care of a variety of different formatting issues that can arise in the process of converting a graph to text.
 
-    Args:   
+    Args:
         graph (EBMGraph): The graph.
         include_description (bool, optional): Whether to include a short descriptive preamble that describes the graph to the LLM. Defaults to True.
         feature_format (_type_, optional): The format of the feature (continuous, cateorical, boolean). Defaults to None (auto-detect).
@@ -213,8 +210,7 @@ def graph_to_text(
         y_axis_precision (str, optional): The precision of the values on the x-axis. Defaults to "auto".
         confidence_bounds (bool, optional): Whether to inlcude confidence bounds. Defaults to True.
         confidence_level (float, optional): The desired confidence level of the bounds. Defaults to 0.95.
-        max_tokens (int, optional): The maximum number of tokens that the textual description of the graph can have. The function simplifies the graph so to fit into this token limit. Defaults to 3000.
-        raw (bool, optional): If True, use the graph data without any simplification. Defaults to False.
+        max_tokens (int or None, optional): The maximum number of tokens that the textual description of the graph can have. The function simplifies the graph to fit into this token limit. Set to None to disable token limits and simplification entirely. Defaults to 3000.
 
     Raises:
         Exception: If an error occurs.
@@ -261,16 +257,16 @@ def graph_to_text(
     # simplify the graph until it fits into the max_tokens limit
     total_tokens = None
     min_variation_per_cent = 0.0
-    
+
     while True:
-        # simplify the graph if raw=False, otherwise use the original graph
+        # simplify the graph if max_tokens is set and we're under the limit, otherwise use original
         simplified_graph = graph
-        if feature_format == "continuous" and not raw:
+        if feature_format == "continuous" and max_tokens is not None:
             simplified_graph = simplify_graph(
                 graph, min_variation_per_cent=min_variation_per_cent
             )
         else:
-            # No simplification when raw=True or for non-continuous features
+            # No simplification when max_tokens=None or for non-continuous features
             simplified_graph = graph
 
         # confidence bounds via normal approximation
@@ -339,9 +335,9 @@ def graph_to_text(
 
         # count the number of tokens
         total_tokens = num_tokens_from_string_(prompt, "gpt-4")
-            
-        # For non-raw mode, continue with the simplification logic
-        if feature_format == "continuous":
+
+        # Continue with the simplification logic only if max_tokens is set
+        if feature_format == "continuous" and max_tokens is not None:
             if total_tokens > max_tokens:
                 if min_variation_per_cent > 0.1:
                     raise Exception(
@@ -359,7 +355,7 @@ def graph_to_text(
                         f" simplified by {min_variation_per_cent * 100:.1f}%."
                     )
                 return prompt
-        else:
+        elif max_tokens is not None:
             if total_tokens > max_tokens:
                 raise Exception(
                     f"The graph for feature {graph.feature_name} of type"
@@ -368,6 +364,9 @@ def graph_to_text(
                 )
             else:
                 return prompt
+        else:
+            # max_tokens is None, return without any token limit checks
+            return prompt
 
 
 def parse_str_tuple_to_float_tuple(str_tuple: str):

@@ -33,7 +33,7 @@ def describe_graph(
 
     Returns:
         str: The prompt to describe the graph.
-    """   
+    """
     prompt = """Below is the graph of a Generalized Additive Model (GAM). The graph is presented as a JSON object with keys representing the x-axis and values representing the y-axis. For continuous features, the keys are intervals that represent ranges where the function predicts the same value. For categorical features, each key represents a possible value that the feature can take.
     
 The graph is provided in the following format:
@@ -55,7 +55,38 @@ The graph is provided in the following format:
         prompt += f"Here is a description of the dataset that the model was trained on:\n\n{dataset_description}\n\n"
 
     # the task that the LLM is intended to perform
-    prompt += task_description
+    if task_description is not None:
+        prompt += task_description
+    return prompt
+
+
+def describe_ebm(
+    model_text: str,
+    dataset_description="",
+    y_axis_description="",
+):
+    """Prompt the LLM to describe an EBM model.
+
+    Args:
+        model_text (str): The textual representation of the model.
+        dataset_description (str, optional): Description of the dataset. Defaults to "".
+        y_axis_description (str, optional): Description of the y-axis. Defaults to "".
+
+    Returns:
+        str: The prompt to describe the EBM.
+    """
+    prompt = """Below is a summary of a Generalized Additive Model (GAM). Please provide a comprehensive description of this model.\n\n"""
+    
+    prompt += f"Model Summary:\n{model_text}\n\n"
+    
+    if dataset_description and len(dataset_description) > 0:
+        prompt += f"Dataset Description:\n{dataset_description}\n\n"
+    
+    if y_axis_description and len(y_axis_description) > 0:
+        prompt += f"Output Description:\n{y_axis_description}\n\n"
+    
+    prompt += "Please describe the model, highlighting the most important features and their effects."
+    
     return prompt
 
 

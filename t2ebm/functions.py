@@ -3,32 +3,31 @@ TalkToEBM: A Natural Language Interface to Explainable Boosting Machines.
 """
 
 import inspect
-
-from typing import Union
-
-import t2ebm
-import t2ebm.llm
-from t2ebm.llm import AbstractChatModel
-
-from t2ebm.graphs import extract_graph, graph_to_text
-
-import t2ebm.prompts as prompts
+from typing import Any, Dict, Union
 
 from interpret.glassbox import (
     ExplainableBoostingClassifier,
     ExplainableBoostingRegressor,
 )
 
+import t2ebm
+import t2ebm.llm
+import t2ebm.prompts as prompts
+from t2ebm.graphs import extract_graph, graph_to_text
+from t2ebm.llm import AbstractChatModel
+
 ###################################################################################################
 # Talk to the EBM about other things than graphs.
 ###################################################################################################
 
 
-def feature_importances_to_text(ebm: Union[ExplainableBoostingClassifier, ExplainableBoostingRegressor]):
+def feature_importances_to_text(
+    ebm: Union[ExplainableBoostingClassifier, ExplainableBoostingRegressor],
+) -> str:
     """Convert the feature importances of an EBM to text.
 
     Args:
-        ebm (_type_): The EBM.
+        ebm: The EBM model.
 
     Returns:
         str: Textual representation of the feature importances.
@@ -47,12 +46,12 @@ def feature_importances_to_text(ebm: Union[ExplainableBoostingClassifier, Explai
 
 
 def describe_graph(
-    llm: Union[AbstractChatModel, str],
+    llm: Union[AbstractChatModel, str, Dict[str, Any]],
     ebm: Union[ExplainableBoostingClassifier, ExplainableBoostingRegressor],
     feature_index: int,
     num_sentences: int = 7,
     **kwargs,
-):
+) -> str:
     """Ask the LLM to describe a graph. Uses chain-of-thought reasoning.
 
     The function accepts additional keyword arguments that are passed to extract_graph, graph_to_text, and describe_graph_cot.
@@ -98,12 +97,12 @@ def describe_graph(
 
 
 def describe_ebm(
-    llm: Union[AbstractChatModel, str],
+    llm: Union[AbstractChatModel, str, Dict[str, Any]],
     ebm: Union[ExplainableBoostingClassifier, ExplainableBoostingRegressor],
     num_sentences: int = 30,
     **kwargs,
-):
-    """Ask the LLM to describe an EBM. 
+) -> str:
+    """Ask the LLM to describe an EBM.
 
     The function accepts additional keyword arguments that are passed to extract_graph, graph_to_text, and describe_graph_cot.
 

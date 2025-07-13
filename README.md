@@ -191,6 +191,16 @@ graph_as_text = graphs.graph_to_text(graph, max_tokens=1000)
 print(graph_as_text)
 ```
 
+The ```max_tokens``` parameter controls automatic simplification of the graph to fit within a token limit. Set ```max_tokens=None``` to disable token limits and simplification entirely:
+
+```python
+# With token limit (simplified graph)
+graph_simplified = graphs.graph_to_text(graph, max_tokens=1000)
+
+# Without token limit (full graph detail)
+graph_full = graphs.graph_to_text(graph, max_tokens=None)
+```
+
 >    This graph represents a continuous-valued feature. The keys are intervals that represent ranges where the function predicts the same value.
 >    
 >    Feature Name: Spa
