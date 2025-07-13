@@ -43,7 +43,7 @@ setuptools.setup(
             "pytest>=6.0",
             "pytest-cov>=3.0",
             "black>=22.0",
-            "isort>=6.0,<7.0",
+            "isort>=5.13.2,<6.0",
             "flake8>=4.0",
             "mypy>=1.0",
             "pre-commit>=2.0",
