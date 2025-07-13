@@ -2,6 +2,7 @@
 Additional tests to boost coverage.
 """
 
+import os
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -70,10 +71,11 @@ class TestCoverageBoost:
         result = llm.setup(dummy_model)
         assert result is dummy_model
 
-        # Test with OpenAI dict config
+        # Test with OpenAI dict config (clear API key to force error)
         config = {"provider": "openai", "model": "gpt-3.5-turbo"}
-        with pytest.raises((llm.OpenAIInitializationError, Exception)):
-            llm.setup(config)
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises((llm.OpenAIInitializationError, Exception)):
+                llm.setup(config)
 
         # Test with invalid provider
         config = {"provider": "unknown", "model": "test", "base_url": "http://test"}

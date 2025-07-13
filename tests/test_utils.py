@@ -2,6 +2,8 @@
 Test utility functions.
 """
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 from interpret.glassbox import ExplainableBoostingClassifier
@@ -57,6 +59,7 @@ class TestUtils:
         assert messages[0]["role"] == "user"
         assert "Hello" in messages[0]["content"]
 
+    @patch.dict("os.environ", {}, clear=True)
     def test_create_direct_client_no_api_key(self):
         """Test direct client creation without API key."""
         with pytest.raises(utils.OpenAIInitializationError):

@@ -17,6 +17,7 @@ class TestLLMExtended:
         # Test that the module properly detects OpenAI version
         assert isinstance(llm.OPENAI_V1, bool)
 
+    @patch.dict("os.environ", {}, clear=True)
     def test_create_openai_client_success(self):
         """Test that create_openai_client handles missing API keys."""
         with pytest.raises(llm.OpenAIInitializationError):

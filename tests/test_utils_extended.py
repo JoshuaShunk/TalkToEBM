@@ -210,6 +210,7 @@ class TestUtilsExtended:
                     # This will try the manual approach but still fail
                     utils.create_direct_client("test-key")
 
+    @patch.dict("os.environ", {}, clear=True)
     def test_create_direct_client_legacy_fallback(self):
         """Test direct client creation handles import errors."""
         with pytest.raises(utils.OpenAIInitializationError):
