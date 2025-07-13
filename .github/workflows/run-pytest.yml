@@ -31,4 +31,14 @@ jobs:
         flake8 t2ebm/ tests/ --max-line-length=88 --extend-ignore=E203,E501,W503,F401,F841,F811,E722,W293,W291,F824
     - name: Run tests
       run: |
-        pytest
+        echo "pytest-cov version:"
+        python -c "import pytest_cov; print(pytest_cov.__version__)"
+        echo "Coverage version:"
+        python -c "import coverage; print(coverage.__version__)"
+        echo "Python path:"
+        python -c "import sys; print(sys.path)"
+        echo "Current directory contents:"
+        ls -la
+        echo "t2ebm directory contents:"
+        ls -la t2ebm/
+        python -m pytest --cov=t2ebm --cov-report=term-missing --cov-fail-under=70
