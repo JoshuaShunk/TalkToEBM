@@ -14,6 +14,13 @@ import t2ebm.llm as llm
 import t2ebm.utils as utils
 from t2ebm.testing import DummyChatModel, openai_debug_completion_query
 
+try:
+    from openai import AuthenticationError
+except ImportError:
+    # Fallback for older OpenAI versions
+    class AuthenticationError(Exception):
+        pass
+
 
 class TestCoverageBoost:
     """Additional tests to improve coverage."""
@@ -148,6 +155,10 @@ class TestCoverageBoost:
             utils.openai_completion_query("gpt-3.5-turbo", messages)
 
         with pytest.raises(
-            (utils.OpenAIInitializationError, utils.OpenAICompletionError)
+            (
+                utils.OpenAIInitializationError,
+                utils.OpenAICompletionError,
+                AuthenticationError,
+            )
         ):
             openai_debug_completion_query("gpt-3.5-turbo", messages)
