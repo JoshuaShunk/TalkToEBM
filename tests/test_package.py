@@ -10,6 +10,7 @@ import t2ebm
 
 def test_package():
     from t2ebm.testing import DummyChatModel
+
     llm = DummyChatModel()
     # generate normally distributed data
     np.random.seed(0)
