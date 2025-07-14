@@ -12,6 +12,7 @@ from interpret.glassbox import ExplainableBoostingClassifier
 import t2ebm.graphs as graphs
 import t2ebm.llm as llm
 import t2ebm.utils as utils
+from t2ebm.testing import DummyChatModel, openai_debug_completion_query
 
 
 class TestCoverageBoost:
@@ -52,7 +53,7 @@ class TestCoverageBoost:
 
     def test_llm_model_representations(self):
         """Test string representations of LLM models."""
-        dummy_model = llm.DummyChatModel()
+        dummy_model = DummyChatModel()
         repr_str = repr(dummy_model)
         assert isinstance(repr_str, str)
 
@@ -67,7 +68,7 @@ class TestCoverageBoost:
     def test_llm_setup_variations(self):
         """Test different LLM setup configurations."""
         # Test with existing model
-        dummy_model = llm.DummyChatModel()
+        dummy_model = DummyChatModel()
         result = llm.setup(dummy_model)
         assert result is dummy_model
 
@@ -149,4 +150,4 @@ class TestCoverageBoost:
         with pytest.raises(
             (utils.OpenAIInitializationError, utils.OpenAICompletionError)
         ):
-            utils.openai_debug_completion_query("gpt-3.5-turbo", messages)
+            openai_debug_completion_query("gpt-3.5-turbo", messages)

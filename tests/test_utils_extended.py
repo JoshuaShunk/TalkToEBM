@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import t2ebm.utils as utils
+from t2ebm.testing import openai_debug_completion_query
 
 
 class TestUtilsExtended:
@@ -222,7 +223,7 @@ class TestUtilsExtended:
         utils.client = None
 
         with pytest.raises(utils.OpenAIInitializationError):
-            utils.openai_debug_completion_query(
+            openai_debug_completion_query(
                 "gpt-3.5-turbo", [{"role": "user", "content": "test"}]
             )
 
@@ -237,7 +238,7 @@ class TestUtilsExtended:
         utils.client = mock_client
 
         with patch("t2ebm.utils.OPENAI_V1", False):
-            response = utils.openai_debug_completion_query(
+            response = openai_debug_completion_query(
                 "gpt-3.5-turbo", [{"role": "user", "content": "test"}]
             )
             assert response == "Legacy response"

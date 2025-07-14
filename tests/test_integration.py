@@ -8,6 +8,7 @@ from interpret.glassbox import ExplainableBoostingClassifier
 
 import t2ebm
 import t2ebm.prompts as prompts
+from t2ebm.testing import DummyChatModel
 
 
 class TestIntegration:
@@ -27,7 +28,7 @@ class TestIntegration:
 
     def test_full_pipeline_with_dummy_llm(self, sample_ebm):
         """Test the full pipeline with dummy LLM."""
-        llm = t2ebm.llm.DummyChatModel()
+        llm = DummyChatModel()
 
         # Test high-level functions
         result = t2ebm.describe_graph(llm, sample_ebm, 0)
@@ -89,7 +90,7 @@ class TestIntegration:
 
     def test_error_handling(self, sample_ebm):
         """Test error handling in various scenarios."""
-        llm = t2ebm.llm.DummyChatModel()
+        llm = DummyChatModel()
 
         # Test invalid feature index
         with pytest.raises((IndexError, ValueError)):

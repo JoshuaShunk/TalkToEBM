@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 import t2ebm.llm as llm
+from t2ebm.testing import DummyChatModel
 
 
 class TestLLMExtended:
@@ -140,7 +141,7 @@ class TestLLMExtended:
 
     def test_chat_completion_message_processing(self):
         """Test chat completion message processing logic."""
-        dummy_model = llm.DummyChatModel()
+        dummy_model = DummyChatModel()
         messages = [
             {"role": "user", "content": "Hello"},
             {

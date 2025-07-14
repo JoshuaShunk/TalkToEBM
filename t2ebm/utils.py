@@ -182,64 +182,6 @@ def openai_completion_query(model, messages, **kwargs):
         return _try_api_resources_fallback(model, messages, **kwargs)
 
 
-def openai_debug_completion_query(model, messages, **kwargs):
-    """
-    Makes a completion query to the OpenAI API with minimal error handling.
-    Better for debugging issues.
-
-    Args:
-        model: The model to use for completion
-        messages: The messages to send to the model
-        **kwargs: Additional arguments to pass to the API
-
-    Returns:
-        str: The model's response text
-
-    Raises:
-        OpenAIInitializationError: If the client is not initialized
-        OpenAICompletionError: If the completion request fails
-    """
-    # Lazily initialize the client
-    global client
-    if not client_initialized:
-        client = _ensure_client()
-
-    # Check if OpenAI client failed to initialize
-    if client is None:
-        raise OpenAIInitializationError(
-            "OpenAI client failed to initialize. Please check your API key."
-        )
-
-    # Handle OpenAI v1.0+ API
-    if OPENAI_V1:
-        try:
-            response = client.chat.completions.create(
-                model=model, messages=messages, **kwargs
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            raise OpenAICompletionError(f"Error with OpenAI API call: {str(e)}")
-
-    # Handle older OpenAI API versions
-    try:
-        # Try ChatCompletion API if available
-        if hasattr(client, "ChatCompletion"):
-            response = client.ChatCompletion.create(
-                model=model, messages=messages, **kwargs
-            )
-            if hasattr(response.choices[0], "message"):
-                return response.choices[0].message["content"]
-            return response.choices[0]["message"]["content"]
-
-        # Fall back to Completion API for very old versions
-        prompt = _format_messages_as_prompt(messages)
-        response = client.Completion.create(engine=model, prompt=prompt, **kwargs)
-        return response.choices[0].text.strip()
-    except Exception as e:
-        # Last resort: try through api_resources if available
-        return _try_api_resources_fallback(model, messages, **kwargs)
-
-
 def _try_api_resources_fallback(model, messages, **kwargs):
     """
     Helper function to try the api_resources fallback approach.

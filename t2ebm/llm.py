@@ -57,12 +57,16 @@ class AbstractChatModel:
     ) -> str:
         """Send a query to a chat model.
 
-        :param messages: The messages to send to the model. We use the OpenAI format.
-        :param temperature: The sampling temperature.
-        :param max_tokens: The maximum number of tokens to generate.
+        Args:
+            messages: The messages to send to the model. We use the OpenAI format.
+            temperature: The sampling temperature.
+            max_tokens: The maximum number of tokens to generate.
 
         Returns:
             str: The model response.
+
+        Raises:
+            NotImplementedError: This is an abstract method that must be implemented by subclasses.
         """
         raise NotImplementedError
 
@@ -752,26 +756,3 @@ def chat_completion(
             }
 
     return messages
-
-
-class DummyChatModel(AbstractChatModel):
-    """
-    Dummy chat model for testing purposes.
-    Always returns a simple test response.
-    """
-
-    def chat_completion(
-        self, messages: List[Dict[str, Any]], temperature: float, max_tokens: int
-    ) -> str:
-        """
-        Return a dummy response for testing.
-
-        Args:
-            messages: The messages (ignored)
-            temperature: Sampling temperature (ignored)
-            max_tokens: Maximum tokens (ignored)
-
-        Returns:
-            str: A dummy response
-        """
-        return "This is a dummy response for testing purposes."

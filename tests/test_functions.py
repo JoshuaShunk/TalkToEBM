@@ -8,6 +8,7 @@ from interpret.glassbox import ExplainableBoostingClassifier
 
 import t2ebm
 import t2ebm.functions as functions
+from t2ebm.testing import DummyChatModel
 
 
 class TestHighLevelFunctions:
@@ -27,7 +28,7 @@ class TestHighLevelFunctions:
 
     def test_describe_graph_with_dummy_llm(self, sample_ebm):
         """Test describe_graph with dummy LLM."""
-        llm = t2ebm.llm.DummyChatModel()
+        llm = DummyChatModel()
 
         result = functions.describe_graph(llm, sample_ebm, 0)
         assert isinstance(result, str)
@@ -35,7 +36,7 @@ class TestHighLevelFunctions:
 
     def test_describe_graph_with_parameters(self, sample_ebm):
         """Test describe_graph with additional parameters."""
-        llm = t2ebm.llm.DummyChatModel()
+        llm = DummyChatModel()
 
         result = functions.describe_graph(
             llm,
@@ -50,7 +51,7 @@ class TestHighLevelFunctions:
 
     def test_describe_ebm_with_dummy_llm(self, sample_ebm):
         """Test describe_ebm with dummy LLM."""
-        llm = t2ebm.llm.DummyChatModel()
+        llm = DummyChatModel()
 
         result = functions.describe_ebm(llm, sample_ebm)
         assert isinstance(result, str)
@@ -58,7 +59,7 @@ class TestHighLevelFunctions:
 
     def test_describe_ebm_with_parameters(self, sample_ebm):
         """Test describe_ebm with additional parameters."""
-        llm = t2ebm.llm.DummyChatModel()
+        llm = DummyChatModel()
 
         result = functions.describe_ebm(
             llm,
@@ -80,7 +81,7 @@ class TestHighLevelFunctions:
 
     def test_invalid_feature_index(self, sample_ebm):
         """Test describe_graph with invalid feature index."""
-        llm = t2ebm.llm.DummyChatModel()
+        llm = DummyChatModel()
 
         with pytest.raises((IndexError, ValueError)):
             functions.describe_graph(llm, sample_ebm, 999)

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import t2ebm.llm as llm
+from t2ebm.testing import DummyChatModel
 
 
 class TestDummyChatModel:
@@ -14,12 +15,12 @@ class TestDummyChatModel:
 
     def test_dummy_chat_model_creation(self):
         """Test creating a dummy chat model."""
-        model = llm.DummyChatModel()
+        model = DummyChatModel()
         assert isinstance(model, llm.AbstractChatModel)
 
     def test_dummy_chat_completion(self):
         """Test dummy chat completion."""
-        model = llm.DummyChatModel()
+        model = DummyChatModel()
         messages = [{"role": "user", "content": "Test message"}]
 
         response = model.chat_completion(messages, temperature=0.7, max_tokens=100)
@@ -89,7 +90,7 @@ class TestSetupFunctions:
 
     def test_setup_with_abstract_model(self):
         """Test setup with an existing AbstractChatModel."""
-        dummy_model = llm.DummyChatModel()
+        dummy_model = DummyChatModel()
         result = llm.setup(dummy_model)
         assert result is dummy_model
 
@@ -124,7 +125,7 @@ class TestChatCompletion:
 
     def test_chat_completion_basic(self):
         """Test basic chat completion."""
-        dummy_model = llm.DummyChatModel()
+        dummy_model = DummyChatModel()
         messages = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "temperature": 0.7, "max_tokens": 100},
@@ -138,7 +139,7 @@ class TestChatCompletion:
 
     def test_chat_completion_with_existing_content(self):
         """Test chat completion with assistant message that already has content."""
-        dummy_model = llm.DummyChatModel()
+        dummy_model = DummyChatModel()
         messages = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there!"},
